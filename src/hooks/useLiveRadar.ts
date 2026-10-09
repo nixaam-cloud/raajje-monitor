@@ -86,7 +86,7 @@ export function useLiveRadar() {
       if (!res.ok) throw new Error('Failed to fetch live news');
       return res.json();
     },
-    refetchInterval: 45000,
+    refetchInterval: 15000,
   });
 
   const macroQuery = useQuery<MacroPulse>({
@@ -110,6 +110,8 @@ export function useLiveRadar() {
     macro: macroQuery.data,
     isLoading: isInitialLoading,
     isRefetching: maritimeQuery.isFetching || aviationQuery.isFetching,
+    isFetchingNews: newsQuery.isFetching,
+    refetchNews: () => newsQuery.refetch(),
     refetchAll: () => {
       maritimeQuery.refetch();
       aviationQuery.refetch();

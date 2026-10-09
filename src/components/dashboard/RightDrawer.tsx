@@ -12,8 +12,10 @@ import AviationPanel from './AviationPanel';
 import WeatherSwellCard from './WeatherSwellCard';
 import TourismMacroCard from './TourismMacroCard';
 import LiveTVPanel from './LiveTVPanel';
+import CCTVPanel from './CCTVPanel';
 import HorizontalScrollContainer from './HorizontalScrollContainer';
-import { Ship, Plane, CloudLightning, BarChart3, Tv, X, ChevronDown, ChevronUp, Map as MapIcon } from 'lucide-react';
+import { Ship, Plane, CloudLightning, BarChart3, Tv, Video, X, ChevronDown, ChevronUp, Map as MapIcon } from 'lucide-react';
+import { MALDIVES_CCTV_FEEDS } from '@/data/cctvFeeds';
 
 interface RightDrawerProps {
   vessels?: MaritimeVessel[];
@@ -64,6 +66,12 @@ export default function RightDrawer({
       label: 'LIVE TV',
       icon: <Tv className="w-3.5 h-3.5" />,
       badge: 'LIVE',
+    },
+    {
+      id: 'cctv',
+      label: 'CCTV CAMS',
+      icon: <Video className="w-3.5 h-3.5 text-rose-400" />,
+      badge: MALDIVES_CCTV_FEEDS.length,
     },
   ];
 
@@ -196,6 +204,7 @@ export default function RightDrawer({
             {activeRightTab === 'weather' && <WeatherSwellCard weather={weather} />}
             {activeRightTab === 'macro' && <TourismMacroCard macro={macro} />}
             {activeRightTab === 'tv' && <LiveTVPanel />}
+            {activeRightTab === 'cctv' && <CCTVPanel />}
           </div>
         </>
       )}

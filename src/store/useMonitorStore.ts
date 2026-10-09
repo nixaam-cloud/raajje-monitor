@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type EntityType = 'vessel' | 'flight' | 'cable' | 'atoll' | 'port' | 'chokepoint' | 'news' | 'weather';
+export type EntityType = 'vessel' | 'flight' | 'cable' | 'atoll' | 'port' | 'chokepoint' | 'news' | 'weather' | 'cctv';
 
 export interface SelectedEntity {
   type: EntityType;
@@ -17,7 +17,22 @@ export interface SelectedEntity {
   raw?: any;
 }
 
-export type ActiveDrawerTab = 'maritime' | 'aviation' | 'weather' | 'macro' | 'tv';
+export interface EventAlert {
+  id: string;
+  title: string;
+  source: string;
+  category: string;
+  severity: 'INFO' | 'ADVISORY' | 'CRITICAL';
+  locationName?: string;
+  atollTag?: string;
+  coordinates?: [number, number];
+  timestamp: string;
+  link?: string;
+  summary?: string;
+  rawNews?: any;
+}
+
+export type ActiveDrawerTab = 'maritime' | 'aviation' | 'weather' | 'macro' | 'tv' | 'cctv';
 
 interface MonitorState {
   // Layer Toggles
@@ -29,6 +44,7 @@ interface MonitorState {
   showEEZBoundary: boolean;
   showChokepoints: boolean;
   showRadarSweep: boolean;
+  showCCTV: boolean;
   
   // Tactical UI Preferences
   soundEnabled: boolean;
@@ -40,7 +56,12 @@ interface MonitorState {
   
   // Selected Entity Inspector
   selectedEntity: SelectedEntity | null;
+  selectedCCTVId: string | null;
   flyToTarget: { coordinates: [number, number]; zoom?: number; pitch?: number; bearing?: number; timestamp: number } | null;
+
+  // Real-time Event Alerts
+  activeAlerts: EventAlert[];
+  unreadAlertCount: number;
   
   // Filters
   vesselCategoryFilter: string;
@@ -49,7 +70,7 @@ interface MonitorState {
   selectedAtollId: string | null;
 
   // Actions
-  toggleLayer: (layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'chokepoints' | 'radar') => void;
+  toggleLayer: (layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'chokepoints' | 'radar' | 'cctv') => void;
   setSoundEnabled: (enabled: boolean) => void;
   toggleSound: () => void;
   toggleCrtScanlines: () => void;
@@ -57,7 +78,12 @@ interface MonitorState {
   setRightPanelOpen: (open: boolean) => void;
   setActiveRightTab: (tab: ActiveDrawerTab) => void;
   setSelectedEntity: (entity: SelectedEntity | null) => void;
+  setSelectedCCTVId: (id: string | null) => void;
   setFlyToTarget: (target: { coordinates: [number, number]; zoom?: number; pitch?: number; bearing?: number } | null) => void;
+  addAlert: (alert: EventAlert) => void;
+  dismissAlert: (id: string) => void;
+  clearAllAlerts: () => void;
+  markAlertsRead: () => void;
   setVesselCategoryFilter: (category: string) => void;
   setFlightCategoryFilter: (category: string) => void;
   setSearchFilter: (query: string) => void;
@@ -75,6 +101,7 @@ export const useMonitorStore = create<MonitorState>((set) => ({
   showEEZBoundary: true,
   showChokepoints: true,
   showRadarSweep: true,
+  showCCTV: true,
 
   // Tactical HUD Preferences
   soundEnabled: true,
@@ -86,7 +113,12 @@ export const useMonitorStore = create<MonitorState>((set) => ({
 
   // Selection & Focus
   selectedEntity: null,
+  selectedCCTVId: null,
   flyToTarget: null,
+
+  // Real-time Event Alerts
+  activeAlerts: [],
+  unreadAlertCount: 0,
 
   // Filters
   vesselCategoryFilter: 'all',
@@ -114,6 +146,8 @@ export const useMonitorStore = create<MonitorState>((set) => ({
           return { showChokepoints: !state.showChokepoints };
         case 'radar':
           return { showRadarSweep: !state.showRadarSweep };
+        case 'cctv':
+          return { showCCTV: !state.showCCTV };
         default:
           return state;
       }
@@ -127,11 +161,29 @@ export const useMonitorStore = create<MonitorState>((set) => ({
   setActiveRightTab: (tab) => set({ activeRightTab: tab, rightPanelOpen: true }),
   
   setSelectedEntity: (entity) => set({ selectedEntity: entity }),
+  setSelectedCCTVId: (id) => set({ selectedCCTVId: id }),
   
   setFlyToTarget: (target) =>
     set({
       flyToTarget: target ? { ...target, timestamp: Date.now() } : null,
     }),
+
+  addAlert: (alert) =>
+    set((state) => {
+      if (state.activeAlerts.some((a) => a.id === alert.id)) return state;
+      return {
+        activeAlerts: [alert, ...state.activeAlerts].slice(0, 5),
+        unreadAlertCount: state.unreadAlertCount + 1,
+      };
+    }),
+
+  dismissAlert: (id) =>
+    set((state) => ({
+      activeAlerts: state.activeAlerts.filter((a) => a.id !== id),
+    })),
+
+  clearAllAlerts: () => set({ activeAlerts: [], unreadAlertCount: 0 }),
+  markAlertsRead: () => set({ unreadAlertCount: 0 }),
 
   setVesselCategoryFilter: (category) => set({ vesselCategoryFilter: category }),
   setFlightCategoryFilter: (category) => set({ flightCategoryFilter: category }),

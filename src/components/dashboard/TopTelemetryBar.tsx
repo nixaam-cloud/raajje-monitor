@@ -43,6 +43,8 @@ export default function TopTelemetryBar({
     setLeftPanelOpen,
     setRightPanelOpen,
     defconLevel,
+    unreadAlertCount,
+    markAlertsRead,
   } = useMonitorStore();
 
   const { playClick } = useSoundEffects();
@@ -161,14 +163,47 @@ export default function TopTelemetryBar({
           <span className="text-[10px] text-slate-400">MMS:</span>
           <span className="font-bold">{alertLevel}</span>
         </div>
+
+        {/* Real-time Event Wire Status / Flash Alert */}
+        {unreadAlertCount > 0 && (
+          <button
+            onClick={() => {
+              playClick();
+              setLeftPanelOpen(true);
+              markAlertsRead();
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-950/80 border border-rose-500/80 text-rose-300 font-bold animate-pulse hover:bg-rose-900/90 transition-all shadow-[0_0_15px_rgba(244,63,94,0.4)] cursor-pointer"
+            title="Click to view new breaking intelligence in wire"
+          >
+            <Radio className="w-3.5 h-3.5 text-rose-400" />
+            <span className="text-[10px] tracking-wider uppercase">
+              {unreadAlertCount} NEW EVENT{unreadAlertCount > 1 ? 'S' : ''}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Right: Clock & Tactical Tools */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Mobile Clock (Compact single-line) */}
-        <div className="sm:hidden flex items-center gap-1 font-mono text-[10px] text-cyan-300 font-bold">
-          <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
-          <span>{mvtTime ? mvtTime.slice(0, 5) : '00:00'} MVT</span>
+        {/* Mobile Clock & Alert */}
+        <div className="sm:hidden flex items-center gap-1.5 font-mono text-[10px]">
+          {unreadAlertCount > 0 && (
+            <button
+              onClick={() => {
+                playClick();
+                setLeftPanelOpen(true);
+                markAlertsRead();
+              }}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-950 border border-rose-500/70 text-rose-300 font-bold animate-pulse"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+              <span>{unreadAlertCount} NEW</span>
+            </button>
+          )}
+          <div className="flex items-center gap-1 text-cyan-300 font-bold">
+            <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
+            <span>{mvtTime ? mvtTime.slice(0, 5) : '00:00'} MVT</span>
+          </div>
         </div>
 
         {/* Desktop Dual Clocks */}

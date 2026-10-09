@@ -79,9 +79,6 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
     playTargetLock();
     setFlyToTarget({
       coordinates: f.coordinates,
-      zoom: 11,
-      pitch: 45,
-      bearing: f.headingDeg,
     });
 
     setSelectedEntity({

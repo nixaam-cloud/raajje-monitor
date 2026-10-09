@@ -27,6 +27,7 @@ import { NewsItem } from '@/app/api/news/route';
 import { CloudRain } from 'lucide-react';
 import MapControls from './MapControls';
 import { resolveAirline, formatFlightNumber, formatShortRoute } from '@/utils/airlineLogos';
+import { MALDIVES_CCTV_FEEDS } from '@/data/cctvFeeds';
 
 // Geographic Airport Coordinates Catalog for Route Paths
 const GLOBAL_AIRPORT_COORDS: Record<string, { name: string; code: string; coords: [number, number] }> = {
@@ -283,6 +284,8 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
   const flightMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
   const weatherMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
   const newsMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
+  const cctvMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
+  const lastMarkerClickTimeRef = useRef<number>(0);
 
   const {
     showVessels,
@@ -293,6 +296,9 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
     showEEZBoundary,
     showChokepoints,
     showRadarSweep,
+    showCCTV,
+    selectedCCTVId,
+    setSelectedCCTVId,
     flyToTarget,
     setFlyToTarget,
     selectedEntity,
@@ -518,6 +524,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       // Click on atolls
       map.on('click', 'atolls-circles', (e) => {
         if (!e.features || e.features.length === 0) return;
+        if (Date.now() - lastMarkerClickTimeRef.current < 500) return;
         const feat = e.features[0];
         const props = feat.properties as any;
         const geom = feat.geometry as GeoJSON.Point;
@@ -659,9 +666,10 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         },
       });
 
-      // Click on Weather Zones
-      map.on('click', 'weather-zones-fill', (e) => {
+      // Click on Weather Zone Labels (click zone title badge instead of full ocean polygon)
+      map.on('click', 'weather-zones-labels', (e) => {
         if (!e.features || e.features.length === 0) return;
+        if (Date.now() - lastMarkerClickTimeRef.current < 500) return;
         const feat = e.features[0];
         const props = feat.properties as any;
         playTargetLock();
@@ -685,6 +693,13 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
             'Marine Safety': props.riskLevel === 'SEVERE' ? 'COASTAL INUNDATION HAZARD' : 'SMALL CRAFT PROHIBITED IN CHANNELS',
           },
         });
+      });
+
+      map.on('mouseenter', 'weather-zones-labels', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'weather-zones-labels', () => {
+        map.getCanvas().style.cursor = '';
       });
 
       // 7. Add Selected Entity Path Source & Layers (Historical Track + Heading Vector)
@@ -882,7 +897,11 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         </div>
       `;
 
-      el.addEventListener('click', () => {
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('mousedown', (e) => e.stopPropagation());
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        lastMarkerClickTimeRef.current = Date.now();
         playTargetLock();
         setSelectedEntity({
           type: 'weather',
@@ -966,7 +985,11 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         </div>
       `;
 
-      el.addEventListener('click', () => {
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('mousedown', (e) => e.stopPropagation());
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        lastMarkerClickTimeRef.current = Date.now();
         playTargetLock();
         setSelectedEntity({
           type: 'news',
@@ -1000,6 +1023,93 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       newsMarkersRef.current.set(item.id, { marker, el });
     });
   }, [news, mapLoaded, playTargetLock, setSelectedEntity]);
+
+  // Update Geolocated CCTV & Live Camera Markers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (!showCCTV) {
+      cctvMarkersRef.current.forEach(({ marker }) => marker.remove());
+      cctvMarkersRef.current.clear();
+      return;
+    }
+
+    MALDIVES_CCTV_FEEDS.forEach((cam) => {
+      if (cctvMarkersRef.current.has(cam.id)) return;
+
+      const el = document.createElement('div');
+      el.className = 'cctv-marker cursor-pointer group relative flex items-center justify-center select-none';
+      el.style.width = '32px';
+      el.style.height = '32px';
+
+      el.innerHTML = `
+        <!-- Directional Field of View (FOV) Radar Cone -->
+        <div class="absolute pointer-events-none w-16 h-16 origin-center flex items-center justify-center -translate-y-2" style="transform: rotate(${cam.heading}deg);">
+          <svg viewBox="0 0 100 100" class="w-full h-full opacity-35 group-hover:opacity-75 transition-opacity" style="color: #f43f5e;">
+            <path d="M50 50 L18 0 A50 50 0 0 1 82 0 Z" fill="currentColor" fill-opacity="0.3" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2" />
+          </svg>
+        </div>
+
+        <!-- Camera Pin Disc -->
+        <div class="relative w-6 h-6 rounded-full bg-slate-950 border border-rose-500/80 flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.4)] group-hover:scale-115 group-hover:border-rose-400 transition-all z-10">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#f43f5e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m22 8-6 4 6 4V8Z"></path>
+            <rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect>
+          </svg>
+          <span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-slate-950"></span>
+        </div>
+
+        <!-- Tactical Hover Tooltip -->
+        <div class="hidden group-hover:flex absolute left-8 -top-2 z-40 flex-col bg-slate-950/95 border border-rose-500/60 px-2 py-1 rounded-lg shadow-2xl text-[9px] font-mono leading-tight whitespace-nowrap pointer-events-none backdrop-blur-md select-none">
+          <div class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+            <span class="font-bold text-slate-100">${cam.name}</span>
+            <span class="px-1 py-0.2 rounded font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[8px]">${cam.category}</span>
+          </div>
+          <span class="text-slate-400 mt-0.5">${cam.locationName} (${cam.atoll}) // ${cam.resolution} @ ${cam.fps}FPS</span>
+          <span class="text-[8px] text-cyan-400">HDG: ${cam.heading}° // CLICK TO STREAM LIVE</span>
+        </div>
+      `;
+
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('mousedown', (e) => e.stopPropagation());
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        lastMarkerClickTimeRef.current = Date.now();
+        playTargetLock();
+        setSelectedCCTVId(cam.id);
+        setSelectedEntity({
+          type: 'cctv',
+          id: cam.id,
+          title: cam.name,
+          subtitle: `${cam.locationName} // ${cam.code}`,
+          badge: {
+            text: `${cam.category} // LIVE`,
+            variant: 'crimson',
+          },
+          coordinates: cam.coordinates,
+          telemetry: {
+            'Camera ID': cam.code,
+            Sector: cam.zone,
+            Location: `${cam.locationName} (${cam.atoll} Atoll)`,
+            Status: `${cam.status} (LIVE)`,
+            Resolution: `${cam.resolution} @ ${cam.fps}fps`,
+            Orientation: `${cam.heading}° (${cam.fov}° FOV)`,
+            Sensor: cam.telemetry.sensorType,
+            Enclosure: cam.telemetry.weatherResistance,
+          },
+          raw: cam,
+        });
+      });
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat(cam.coordinates)
+        .addTo(map);
+
+      cctvMarkersRef.current.set(cam.id, { marker, el });
+    });
+  }, [showCCTV, mapLoaded, playTargetLock, setSelectedEntity, setSelectedCCTVId]);
 
   // Update Vessel Markers smoothly
   useEffect(() => {
@@ -1064,14 +1174,12 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           </div>
         `;
 
-        el.addEventListener('click', () => {
+        el.addEventListener('pointerdown', (e) => e.stopPropagation());
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          lastMarkerClickTimeRef.current = Date.now();
           playTargetLock();
-          setFlyToTarget({
-            coordinates: v.coordinates,
-            zoom: 11,
-            pitch: 30,
-            bearing: v.cog,
-          });
           setSelectedEntity({
             type: 'vessel',
             id: v.id,
@@ -1109,7 +1217,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         vesselMarkersRef.current.set(v.id, { marker, el });
       }
     });
-  }, [vessels, showVessels, mapLoaded, playTargetLock, setSelectedEntity, setFlyToTarget]);
+  }, [vessels, showVessels, mapLoaded, playTargetLock, setSelectedEntity]);
 
   // Update Flight Markers smoothly
   useEffect(() => {
@@ -1166,17 +1274,17 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         }
       } else {
         const el = document.createElement('div');
-        el.className = 'flight-marker cursor-pointer group relative flex items-center';
-        el.style.width = '24px';
-        el.style.height = '24px';
+        el.className = 'flight-marker cursor-pointer group relative flex items-center select-none';
+        el.style.width = '28px';
+        el.style.height = '28px';
 
         el.innerHTML = `
           <div class="flight-icon w-full h-full flex items-center justify-center transition-transform duration-500" style="transform: rotate(${f.headingDeg}deg);">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="${flightColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drop-shadow-[0_0_8px_${flightColor}]">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="${flightColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drop-shadow-[0_0_8px_${flightColor}]">
               <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" fill="${flightColor}" fill-opacity="0.35"></path>
             </svg>
           </div>
-          <div class="flight-badge flex items-center gap-1 absolute left-6 -top-1 z-20 bg-slate-950/90 border border-slate-700/80 hover:border-cyan-400 px-1.5 py-0.5 rounded shadow-lg text-[9px] font-mono leading-none whitespace-nowrap pointer-events-auto backdrop-blur-md select-none transition-all group-hover:scale-105 group-hover:z-50">
+          <div class="flight-badge flex items-center gap-1 absolute left-7 -top-1 z-20 bg-slate-950/90 border border-slate-700/80 hover:border-cyan-400 px-1.5 py-0.5 rounded shadow-lg text-[9px] font-mono leading-none whitespace-nowrap pointer-events-auto backdrop-blur-md select-none transition-all group-hover:scale-105 group-hover:z-50">
             <span class="w-3.5 h-3.5 rounded flex items-center justify-center font-bold text-[7px] text-white shrink-0 shadow-sm" style="background-color: ${airline.brandColor};">
               ${airline.code.slice(0, 2)}
             </span>
@@ -1185,14 +1293,12 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           </div>
         `;
 
-        el.addEventListener('click', () => {
+        el.addEventListener('pointerdown', (e) => e.stopPropagation());
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          lastMarkerClickTimeRef.current = Date.now();
           playTargetLock();
-          setFlyToTarget({
-            coordinates: f.coordinates,
-            zoom: 10.5,
-            pitch: 35,
-            bearing: f.headingDeg,
-          });
           setSelectedEntity({
             type: 'flight',
             id: f.id,
@@ -1232,20 +1338,27 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         flightMarkersRef.current.set(f.id, { marker, el });
       }
     });
-  }, [flights, showFlights, mapLoaded, playTargetLock, setSelectedEntity, setFlyToTarget]);
+  }, [flights, showFlights, mapLoaded, playTargetLock, setSelectedEntity]);
 
   // Handle fly-to targets from store (when user clicks an item in right or left panel)
   useEffect(() => {
     if (!flyToTarget || !mapRef.current) return;
-    mapRef.current.flyTo({
+    const flyOptions: maplibregl.FlyToOptions = {
       center: flyToTarget.coordinates,
-      zoom: flyToTarget.zoom || 9.5,
-      pitch: flyToTarget.pitch || 30,
-      bearing: flyToTarget.bearing || 0,
       speed: 1.4,
       curve: 1.4,
       essential: true,
-    });
+    };
+    if (flyToTarget.zoom !== undefined) {
+      flyOptions.zoom = flyToTarget.zoom;
+    }
+    if (flyToTarget.pitch !== undefined) {
+      flyOptions.pitch = flyToTarget.pitch;
+    }
+    if (flyToTarget.bearing !== undefined) {
+      flyOptions.bearing = flyToTarget.bearing;
+    }
+    mapRef.current.flyTo(flyOptions);
   }, [flyToTarget]);
 
   // Synchronize dynamic faint path line for selected Flight or Vessel

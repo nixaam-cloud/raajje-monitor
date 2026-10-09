@@ -41,9 +41,6 @@ export default function MaritimePanel({ vessels = [] }: MaritimePanelProps) {
     playTargetLock();
     setFlyToTarget({
       coordinates: v.coordinates,
-      zoom: 11,
-      pitch: 45,
-      bearing: v.cog,
     });
     setSelectedEntity({
       type: 'vessel',

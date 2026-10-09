@@ -569,8 +569,16 @@ export async function GET() {
           // If a local island/city or atoll is specifically detected in the text, tag it as LOCAL
           const isLocallyTagged = isLocal || !!geo.locationName || (category === 'LOCAL');
 
+          const rawKey = (item.guid ? String(item.guid) : '') || (item.link || '') || (title || rawTitle);
+          let hashVal = 0;
+          for (let c = 0; c < rawKey.length; c++) {
+            hashVal = ((hashVal << 5) - hashVal) + rawKey.charCodeAt(c);
+            hashVal |= 0;
+          }
+          const stableId = `gnews-${Math.abs(hashVal).toString(36)}`;
+
           aggregatedNews.push({
-            id: `gnews-${itemIdx}-${item.guid ? String(item.guid).slice(-8) : itemIdx}`,
+            id: stableId,
             title: title || rawTitle,
             source: sourceName,
             link: item.link || 'https://news.google.com',
@@ -619,7 +627,7 @@ export async function GET() {
     },
     {
       headers: {
-        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30',
       },
     }
   );

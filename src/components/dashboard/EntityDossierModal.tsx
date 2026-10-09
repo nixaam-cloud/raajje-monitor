@@ -15,6 +15,7 @@ import {
   Rss,
   Check,
   CloudRain,
+  Video,
   ChevronDown,
   ChevronUp,
   ArrowLeftRight,
@@ -86,8 +87,6 @@ export default function EntityDossierModal() {
     if (selectedEntity.coordinates) {
       setFlyToTarget({
         coordinates: selectedEntity.coordinates,
-        zoom: 11.5,
-        pitch: 40,
       });
     }
   };
@@ -112,6 +111,8 @@ export default function EntityDossierModal() {
         return <MapPin className="w-4 h-4 text-amber-400 shrink-0" />;
       case 'weather':
         return <CloudRain className="w-4 h-4 text-amber-400 shrink-0" />;
+      case 'cctv':
+        return <Video className="w-4 h-4 text-rose-400 shrink-0" />;
       default:
         return <Rss className="w-4 h-4 text-cyan-400 shrink-0" />;
     }

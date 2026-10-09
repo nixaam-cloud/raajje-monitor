@@ -11,6 +11,7 @@ import {
   Anchor,
   ShieldAlert,
   Radio,
+  Video,
   Plus,
   Minus,
 } from 'lucide-react';
@@ -31,12 +32,13 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
     showPortsAndAirports,
     showEEZBoundary,
     showRadarSweep,
+    showCCTV,
     toggleLayer,
   } = useMonitorStore();
   const { playClick } = useSoundEffects();
 
   const handleToggle = (
-    layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'radar'
+    layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'radar' | 'cctv'
   ) => {
     playClick();
     toggleLayer(layer);
@@ -139,6 +141,19 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
           >
             <Radio className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-teal-400" />
             <span>RADAR</span>
+          </button>
+
+          <button
+            onClick={() => handleToggle('cctv')}
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-mono font-medium rounded-lg transition-all shrink-0 ${
+              showCCTV
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-950 font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
+            }`}
+            title="Toggle Geolocated CCTV & Live Cameras"
+          >
+            <Video className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-rose-400" />
+            <span>CCTV</span>
           </button>
         </HorizontalScrollContainer>
       </div>

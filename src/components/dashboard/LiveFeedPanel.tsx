@@ -16,17 +16,32 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  RefreshCw,
+  Zap,
 } from 'lucide-react';
 import HorizontalScrollContainer from './HorizontalScrollContainer';
 import { MALDIVES_ATOLLS } from '@/data/maldivesGeo';
 
 interface LiveFeedPanelProps {
   news?: NewsItem[];
+  onRefreshNews?: () => void;
+  isFetchingNews?: boolean;
 }
 
-export default function LiveFeedPanel({ news = [] }: LiveFeedPanelProps) {
-  const { leftPanelOpen, setLeftPanelOpen, setFlyToTarget, setSelectedEntity } = useMonitorStore();
-  const { playClick, playTargetLock } = useSoundEffects();
+export default function LiveFeedPanel({
+  news = [],
+  onRefreshNews,
+  isFetchingNews = false,
+}: LiveFeedPanelProps) {
+  const {
+    leftPanelOpen,
+    setLeftPanelOpen,
+    setFlyToTarget,
+    setSelectedEntity,
+    activeAlerts,
+    addAlert,
+  } = useMonitorStore();
+  const { playClick, playTargetLock, playAlertChirp } = useSoundEffects();
 
   const [activeTab, setActiveTab] = useState<'all' | 'local'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,8 +85,6 @@ export default function LiveFeedPanel({ news = [] }: LiveFeedPanelProps) {
     if (item.coordinates) {
       setFlyToTarget({
         coordinates: item.coordinates,
-        zoom: 13,
-        pitch: 35,
       });
       return;
     }
@@ -87,11 +100,26 @@ export default function LiveFeedPanel({ news = [] }: LiveFeedPanelProps) {
       if (matched) {
         setFlyToTarget({
           coordinates: matched.coordinates,
-          zoom: 10.5,
-          pitch: 30,
         });
       }
     }
+  };
+
+  const handleSimulateAlert = () => {
+    playAlertChirp();
+    const testId = `sim-event-${Date.now()}`;
+    addAlert({
+      id: testId,
+      title: 'MNDF Coast Guard Intercepts Unidentified Craft in Equatorial Channel',
+      source: 'MNDF Media Desk',
+      category: 'DEFENSE',
+      severity: 'CRITICAL',
+      locationName: 'Equatorial Channel',
+      atollTag: 'Addu',
+      coordinates: [73.2, -0.05],
+      timestamp: new Date().toISOString(),
+      summary: 'Coast Guard Ship Huravee deployed fast interception boat to verify suspicious vessel operating without active AIS transponder inside Maldives EEZ.',
+    });
   };
 
   const handleSelectNews = (item: NewsItem) => {
@@ -279,6 +307,45 @@ export default function LiveFeedPanel({ news = [] }: LiveFeedPanelProps) {
             </button>
           ))}
         </HorizontalScrollContainer>
+
+        {/* Realtime Polling Status & Actions */}
+        <div className="pt-1.5 flex items-center justify-between text-[10px] font-mono border-t border-slate-850">
+          <div className="flex items-center gap-1.5 text-slate-400">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="text-[9px] text-emerald-400/90 font-semibold tracking-wider">
+              AUTO-POLL: 15S
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {onRefreshNews && (
+              <button
+                onClick={() => {
+                  playClick();
+                  onRefreshNews();
+                }}
+                disabled={isFetchingNews}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-slate-700 hover:border-cyan-500/50 text-[9px] transition-colors disabled:opacity-50"
+                title="Force refresh intelligence wire"
+              >
+                <RefreshCw className={`w-2.5 h-2.5 ${isFetchingNews ? 'animate-spin text-cyan-400' : ''}`} />
+                <span>CHECK</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleSimulateAlert}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-[9px] transition-colors"
+              title="Trigger simulated breaking event alert"
+            >
+              <Zap className="w-2.5 h-2.5 text-amber-400" />
+              <span>TEST ALERT</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 4. Filtered News Stream */}
@@ -323,6 +390,13 @@ export default function LiveFeedPanel({ news = [] }: LiveFeedPanelProps) {
                     <span className={`text-[10px] font-mono ${item.category === 'LOCAL' ? 'text-amber-400 font-bold' : 'text-slate-400'}`}>
                       [{item.category}]
                     </span>
+
+                    {/* Real-time Alert Active Marker */}
+                    {activeAlerts.some((a) => a.id === item.id) && (
+                      <span className="px-1.5 py-0.2 text-[8px] font-mono font-bold rounded bg-rose-500/25 text-rose-300 border border-rose-500/50 animate-pulse">
+                        NEW EVENT
+                      </span>
+                    )}
                   </div>
 
                   {/* Geolocation Tag Button */}

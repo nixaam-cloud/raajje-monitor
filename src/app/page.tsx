@@ -9,6 +9,8 @@ import TopTelemetryBar from '@/components/dashboard/TopTelemetryBar';
 import LiveFeedPanel from '@/components/dashboard/LiveFeedPanel';
 import RightDrawer from '@/components/dashboard/RightDrawer';
 import EntityDossierModal from '@/components/dashboard/EntityDossierModal';
+import CCTVModal from '@/components/dashboard/CCTVModal';
+import EventAlertBanner from '@/components/alerts/EventAlertBanner';
 import { Plane, Ship, Radio, Tv, Map as MapIcon } from 'lucide-react';
 
 // Dynamically import MapLibre WebGL canvas to prevent SSR window issues
@@ -40,7 +42,7 @@ export default function CockpitPage() {
     setRightPanelOpen,
     setActiveRightTab,
   } = useMonitorStore();
-  const { maritime, aviation, weather, news, macro } = useLiveRadar();
+  const { maritime, aviation, weather, news, macro, refetchNews, isFetchingNews } = useLiveRadar();
   const { playClick } = useSoundEffects();
 
   // On mobile viewports, start with clean unobstructed map view
@@ -104,7 +106,11 @@ export default function CockpitPage() {
         />
 
         {/* 3. Floating Left Intelligence Wire */}
-        <LiveFeedPanel news={news?.feed} />
+        <LiveFeedPanel
+          news={news?.feed}
+          onRefreshNews={refetchNews}
+          isFetchingNews={isFetchingNews}
+        />
 
         {/* 4. Floating Right Operations Deck */}
         <RightDrawer
@@ -190,6 +196,12 @@ export default function CockpitPage() {
 
         {/* 6. Entity Telemetry Dossier Modal */}
         <EntityDossierModal />
+
+        {/* 7. Geolocated CCTV Live Feed Modal */}
+        <CCTVModal />
+
+        {/* 8. Real-time Event & Breaking Intelligence Alerts */}
+        <EventAlertBanner news={news?.feed} weather={weather} />
       </div>
     </main>
   );
