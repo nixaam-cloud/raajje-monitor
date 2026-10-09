@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { INDIAN_OCEAN_VESSELS } from '@/data/indianOceanMaritime';
 
 export interface MaritimeVessel {
   id: string;
@@ -8,7 +9,7 @@ export interface MaritimeVessel {
   callsign: string;
   flag: string;
   flagCode: string;
-  type: 'tanker' | 'cargo' | 'safari_boat' | 'rtl_ferry' | 'fishing_dhoni' | 'coast_guard';
+  type: 'tanker' | 'cargo' | 'safari_boat' | 'rtl_ferry' | 'fishing_dhoni' | 'coast_guard' | 'naval_warship' | 'naval_support';
   typeName: string;
   coordinates: [number, number]; // [lng, lat]
   sog: number; // Speed Over Ground (knots)
@@ -24,6 +25,9 @@ export interface MaritimeVessel {
   hazardousCargo: boolean;
   history: [number, number][]; // Recent track coordinates
   inEEZ?: boolean;
+  isMilitary?: boolean;
+  /** SIMULATED_AIS = animated regional fleet; MODELED_OSINT = representative naval/regional picture */
+  dataQuality?: 'SIMULATED_AIS' | 'MODELED_OSINT';
 }
 
 // Comprehensive Fleet Database covering Maldives EEZ and Surrounding International Sea Lanes (SLOC)
@@ -843,7 +847,8 @@ function calculateLivePositions(vessels: MaritimeVessel[]): MaritimeVessel[] {
     const speedDegPerSec = (v.sog * 1.852) / (111 * 3600);
     const rad = (v.cog * Math.PI) / 180;
 
-    const driftCycleSec = (timeOffsetSeconds + parseInt(v.mmsi.slice(-3), 10) * 12) % 600;
+    const idSeed = Array.from(v.id).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    const driftCycleSec = (timeOffsetSeconds + (idSeed % 997) * 12) % 600;
     const deltaLat = Math.cos(rad) * speedDegPerSec * driftCycleSec * 2.5;
     const deltaLng = Math.sin(rad) * speedDegPerSec * driftCycleSec * 2.5;
 
@@ -863,7 +868,10 @@ function calculateLivePositions(vessels: MaritimeVessel[]): MaritimeVessel[] {
 
 export async function GET() {
   try {
-    const liveVessels = calculateLivePositions(BASE_VESSELS);
+    const liveVessels = calculateLivePositions([
+      ...BASE_VESSELS.map((v) => ({ ...v, dataQuality: v.dataQuality ?? ('SIMULATED_AIS' as const) })),
+      ...INDIAN_OCEAN_VESSELS,
+    ]);
 
     const stats = {
       total: liveVessels.length,
@@ -875,6 +883,8 @@ export async function GET() {
       rtlFerries: liveVessels.filter((v) => v.type === 'rtl_ferry').length,
       coastGuard: liveVessels.filter((v) => v.type === 'coast_guard').length,
       fishingDhonis: liveVessels.filter((v) => v.type === 'fishing_dhoni').length,
+      militaryVessels: liveVessels.filter((v) => v.isMilitary).length,
+      indianOceanWide: liveVessels.filter((v) => v.dataQuality === 'MODELED_OSINT').length,
       chokepoints: {
         eightDegreeChannel: liveVessels.filter((v) => v.zone.includes('Eight Degree')).length,
         oneAndHalfDegreeChannel: liveVessels.filter((v) => v.zone.includes('One and a Half')).length,

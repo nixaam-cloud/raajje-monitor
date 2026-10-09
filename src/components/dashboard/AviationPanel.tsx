@@ -42,6 +42,7 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
   const outboundCount = useMemo(() => flights.filter((f) => f.flightDirection === 'OUTBOUND').length, [flights]);
   const domesticCount = useMemo(() => flights.filter((f) => f.flightDirection === 'DOMESTIC').length, [flights]);
   const overflightCount = useMemo(() => flights.filter((f) => f.flightDirection === 'OVERFLIGHT').length, [flights]);
+  const militaryCount = useMemo(() => flights.filter((f) => f.isMilitary).length, [flights]);
 
   const filteredFlights = useMemo(() => {
     return flights.filter((f) => {
@@ -53,6 +54,7 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
       else if (directionFilter === 'widebody') matchesDirection = f.aircraftCategory === 'INTERNATIONAL_WIDEBODY';
       else if (directionFilter === 'seaplane') matchesDirection = f.aircraftCategory === 'SEAPLANE_TWIN_OTTER';
       else if (directionFilter === 'regional') matchesDirection = f.aircraftCategory === 'REGIONAL_TURBOPROP';
+      else if (directionFilter === 'military') matchesDirection = !!f.isMilitary;
 
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
@@ -109,6 +111,13 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
         Squawk: f.squawk,
         Sector: f.airwaySector || 'Maldives Airspace',
         Phase: f.flightPhase,
+        ...(f.militaryRole ? { 'Military Role': f.militaryRole } : {}),
+        'Data Source':
+          f.dataQuality === 'MODELED_OSINT'
+            ? 'MODELED OSINT (not a live track)'
+            : f.dataQuality === 'SIMULATED_ADSB'
+            ? 'SIMULATED ADS-B (offline fallback)'
+            : 'LIVE ADS-B',
       },
       raw: f,
     });
@@ -205,6 +214,7 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
             { id: 'outbound', label: `↗ OUTBOUND (${outboundCount})`, highlight: 'amber' },
             { id: 'domestic', label: `↔ DOMESTIC (${domesticCount})`, highlight: 'cyan' },
             { id: 'overflight', label: `✈ OVERFLIGHTS (${overflightCount})` },
+            { id: 'military', label: `⚔ MILITARY (${militaryCount})`, highlight: 'rose' },
             { id: 'widebody', label: 'WIDEBODIES' },
             { id: 'seaplane', label: 'SEAPLANES' },
           ].map((tab) => (
@@ -220,6 +230,8 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
                     : tab.highlight === 'amber'
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                    : tab.highlight === 'rose'
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-sm'
                     : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
                   : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-slate-200'
               }`}
@@ -304,7 +316,9 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
                     {/* Direction Badge */}
                     <span
                       className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold font-mono ${
-                        f.flightDirection === 'INBOUND'
+                        f.isMilitary
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                          : f.flightDirection === 'INBOUND'
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                           : f.flightDirection === 'OUTBOUND'
                           ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
@@ -313,7 +327,9 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
                           : 'bg-slate-800 text-slate-400 border border-slate-700'
                       }`}
                     >
-                      {f.flightDirection === 'INBOUND'
+                      {f.isMilitary
+                        ? '⚔ MIL'
+                        : f.flightDirection === 'INBOUND'
                         ? '↘ TO MV'
                         : f.flightDirection === 'OUTBOUND'
                         ? '↗ FROM MV'

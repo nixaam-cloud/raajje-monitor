@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { INDIAN_OCEAN_MILITARY_FLIGHTS } from '@/data/indianOceanAviation';
 
 export interface AviationFlight {
   id: string;
@@ -6,7 +7,7 @@ export interface AviationFlight {
   callsign: string;
   operator: string;
   aircraftType: string;
-  aircraftCategory: 'INTERNATIONAL_WIDEBODY' | 'REGIONAL_TURBOPROP' | 'SEAPLANE_TWIN_OTTER';
+  aircraftCategory: 'INTERNATIONAL_WIDEBODY' | 'REGIONAL_TURBOPROP' | 'SEAPLANE_TWIN_OTTER' | 'MILITARY';
   origin: string;
   destination: string;
   originCode?: string; // e.g. 'DXB', 'MLE', 'LHR', 'GAN'
@@ -25,6 +26,10 @@ export interface AviationFlight {
   airwaySector?: string;
   registration?: string;
   flightNumber?: string;
+  isMilitary?: boolean;
+  militaryRole?: string;
+  /** LIVE_ADSB = real receiver data; SIMULATED_ADSB = offline fallback fleet; MODELED_OSINT = representative military picture */
+  dataQuality?: 'LIVE_ADSB' | 'SIMULATED_ADSB' | 'MODELED_OSINT';
 }
 
 const FALLBACK_FLIGHTS: AviationFlight[] = [
@@ -1004,6 +1009,16 @@ function resolveFlightPhase(altitudeFt: number, velocityKts: number, verticalRat
   return 'CRUISE';
 }
 
+const MILITARY_CALLSIGN_RE = /^(RCH|REACH|FORTE|JAKE|LAGR|QID|RRR|CNV|CTM|FAF|IAM|PLF|IFC|IAF|PAF|NATO|MMF|DUKE|HOMER|NAVY)/;
+const MILITARY_MODEL_CODES = new Set([
+  'P8', 'P3', 'C17', 'C130', 'C30J', 'B52', 'B1', 'K35R', 'KC10', 'A400', 'Y8', 'E3TF', 'E3CF', 'E6',
+  'R135', 'RC135', 'U2', 'H60', 'H47', 'C5M', 'C295', 'AN12', 'IL76', 'IL38', 'TU95', 'F16', 'F18', 'F35', 'SU30', 'EUFI', 'RFAL',
+]);
+
+function isMilitaryCraft(callsign: string, modelCode: string): boolean {
+  return MILITARY_CALLSIGN_RE.test(callsign) || MILITARY_MODEL_CODES.has(modelCode);
+}
+
 function getAirwaySector(lng: number, lat: number, altitudeFt: number, phase: string): string {
   if (altitudeFt <= 50) return 'Velana Ground Apron / Seaplane Water Terminal';
   if (phase === 'FINAL') return 'Runway 18 / Water Runway Final Approach';
@@ -1081,7 +1096,8 @@ export async function GET() {
     const timeout = setTimeout(() => controller.abort(), 4500);
 
     const liveRes = await fetch(
-      'https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=9.5,-3.8,69.5,77.5',
+      // Indian Ocean wide: N30°, S40°, W40°E, E115°E
+      'https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=30,-40,40,115',
       {
         signal: controller.signal,
         headers: {
@@ -1126,9 +1142,13 @@ export async function GET() {
               tailNumber.startsWith('8Q-R') ||
               rawCallsign.startsWith('8QT') ||
               rawCallsign.startsWith('8QR') ||
-              (altitudeFt < 5000 && velocityKts < 180 && lng >= 72.5 && lng <= 74.0);
+              (altitudeFt < 5000 && velocityKts < 180 && lng >= 72.5 && lng <= 74.0 && lat >= -1.0 && lat <= 7.5);
 
-            const aircraftCategory: AviationFlight['aircraftCategory'] = isSeaplane
+            const isMilitary = isMilitaryCraft(rawCallsign, modelCode);
+
+            const aircraftCategory: AviationFlight['aircraftCategory'] = isMilitary
+              ? 'MILITARY'
+              : isSeaplane
               ? 'SEAPLANE_TWIN_OTTER'
               : modelInfo?.category
               ? modelInfo.category
@@ -1144,7 +1164,9 @@ export async function GET() {
               ? `${modelCode} Commercial Jet`
               : 'Aviation Aircraft';
 
-            const operator = resolveOperator(airlineCode, rawCallsign, tailNumber);
+            const operator = isMilitary
+              ? 'Military / State Aircraft'
+              : resolveOperator(airlineCode, rawCallsign, tailNumber);
 
             // Origin / Destination resolution
             let origin = rawOrigin ? (AIRPORT_NAMES[rawOrigin] || `${rawOrigin} Airport`) : '';
@@ -1224,6 +1246,9 @@ export async function GET() {
               history,
               inEEZ,
               airwaySector,
+              isMilitary,
+              militaryRole: isMilitary ? 'Military aircraft detected on live ADS-B' : undefined,
+              dataQuality: 'LIVE_ADSB' as const,
             };
           });
         }
@@ -1240,7 +1265,7 @@ export async function GET() {
       const timeout = setTimeout(() => controller.abort(), 4000);
 
       const openSkyRes = await fetch(
-        'https://opensky-network.org/api/states/all?lamin=-3.8&lomin=69.5&lamax=9.5&lomax=77.5',
+        'https://opensky-network.org/api/states/all?lamin=-40&lomin=40&lamax=30&lomax=115',
         {
           signal: controller.signal,
           headers: { Accept: 'application/json' },
@@ -1312,8 +1337,23 @@ export async function GET() {
   // ─── TIER 3: KINEMATIC FALLBACK FLEET IF NO LIVE CRAFT FOUND ───
   if (flights.length === 0) {
     source = 'MALDIVES_EEZ_ADS-B_RADAR (OFFLINE_FALLBACK)';
-    flights = updateFlightPositions(FALLBACK_FLIGHTS);
+    flights = updateFlightPositions(FALLBACK_FLIGHTS).map((f) => ({ ...f, dataQuality: 'SIMULATED_ADSB' as const }));
+  } else {
+    // Keep the payload map-friendly: military first, then Maldives-related, then nearest to the Maldives
+    const dist = (f: AviationFlight) => Math.hypot(f.coordinates[0] - 73.5, f.coordinates[1] - 4.2);
+    flights = flights
+      .map((f) => ({ ...f, dataQuality: f.dataQuality ?? ('LIVE_ADSB' as const) }))
+      .sort(
+        (a, b) =>
+          Number(!!b.isMilitary) - Number(!!a.isMilitary) ||
+          Number(b.isMaldivesRelated) - Number(a.isMaldivesRelated) ||
+          dist(a) - dist(b)
+      )
+      .slice(0, 350);
   }
+
+  // Representative Indian Ocean military air picture (not available on public ADS-B)
+  flights = [...flights, ...updateFlightPositions(INDIAN_OCEAN_MILITARY_FLIGHTS)];
 
   const inboundFlights = flights.filter((f) => f.flightDirection === 'INBOUND');
   const outboundFlights = flights.filter((f) => f.flightDirection === 'OUTBOUND');
@@ -1330,6 +1370,8 @@ export async function GET() {
     internationalWidebody: flights.filter((f) => f.aircraftCategory === 'INTERNATIONAL_WIDEBODY').length,
     regionalTurboprop: flights.filter((f) => f.aircraftCategory === 'REGIONAL_TURBOPROP').length,
     seaplaneFloatplanes: flights.filter((f) => f.aircraftCategory === 'SEAPLANE_TWIN_OTTER').length,
+    militaryAircraft: flights.filter((f) => f.isMilitary).length,
+    indianOceanWideTracks: flights.length,
     runway18Status: 'OPERATIONAL // CAT-I ILS ACTIVE',
     seaplaneWaterTerminal: 'ALL WATER RUNWAYS ACTIVE',
   };

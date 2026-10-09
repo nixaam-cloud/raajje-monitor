@@ -320,7 +320,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
       center: MALDIVES_BOUNDS.center,
       zoom: MALDIVES_BOUNDS.defaultZoom,
-      minZoom: 4.8,
+      minZoom: 2.8,
       maxZoom: 16,
       pitch: 20,
       attributionControl: false,
@@ -1143,6 +1143,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       if (v.type === 'rtl_ferry') accentColor = '#38bdf8'; // sky blue
       if (v.type === 'safari_boat') accentColor = '#a855f7'; // purple
       if (v.type === 'fishing_dhoni') accentColor = '#fbbf24'; // yellow
+      if (v.isMilitary) accentColor = '#f43f5e'; // rose = military / naval
 
       if (existing) {
         existing.marker.setLngLat(v.coordinates);
@@ -1165,8 +1166,8 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           <div class="hidden group-hover:flex absolute left-6 -top-2 z-50 flex-col bg-slate-950/95 border border-slate-700 px-2 py-1 rounded shadow-xl text-[10px] font-mono whitespace-nowrap pointer-events-none">
             <div class="flex items-center justify-between gap-2">
               <span class="text-white font-bold">${v.name}</span>
-              <span class="text-[9px] px-1 py-0.2 rounded font-bold ${v.inEEZ ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'}">
-                ${v.inEEZ ? 'MALDIVES EEZ' : 'SURROUNDING SLOC'}
+              <span class="text-[9px] px-1 py-0.2 rounded font-bold ${v.isMilitary ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : v.inEEZ ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'}">
+                ${v.isMilitary ? 'MILITARY' : v.inEEZ ? 'MALDIVES EEZ' : 'SURROUNDING SLOC'}
               </span>
             </div>
             <span class="text-slate-400">${v.typeName} // SOG: ${v.sog} kts</span>
@@ -1205,6 +1206,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
               Destination: v.destination,
               ETA: v.eta,
               Sector: v.zone,
+              'Data Source': v.dataQuality === 'MODELED_OSINT' ? 'MODELED OSINT (not a live track)' : 'SIMULATED AIS',
             },
             raw: v,
           });
@@ -1243,13 +1245,14 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       const existing = flightMarkersRef.current.get(f.id);
 
       const isSeaplane = f.aircraftCategory === 'SEAPLANE_TWIN_OTTER';
-      const flightColor = isSeaplane ? '#38bdf8' : '#06b6d4';
+      const flightColor = f.isMilitary ? '#f43f5e' : isSeaplane ? '#38bdf8' : '#06b6d4';
       const airline = resolveAirline(f.callsign, f.operator);
       const flightNumber = formatFlightNumber(f.callsign, airline);
       const shortRoute = formatShortRoute(f.origin, f.destination, f.originCode, f.destinationCode);
 
-      const routeLabel =
-        f.flightDirection === 'INBOUND'
+      const routeLabel = f.isMilitary
+        ? 'MIL'
+        : f.flightDirection === 'INBOUND'
           ? '➔ MLE'
           : f.flightDirection === 'OUTBOUND'
           ? (shortRoute.to || 'OUT')
@@ -1257,8 +1260,9 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           ? (shortRoute.to || 'DOM')
           : `${shortRoute.from}➔${shortRoute.to}`;
 
-      const routeColorClass =
-        f.flightDirection === 'INBOUND'
+      const routeColorClass = f.isMilitary
+        ? 'text-rose-400'
+        : f.flightDirection === 'INBOUND'
           ? 'text-emerald-400'
           : f.flightDirection === 'OUTBOUND'
           ? 'text-amber-400'
@@ -1326,6 +1330,13 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
               Squawk: f.squawk,
               Sector: f.airwaySector || 'Maldives Airspace',
               Phase: f.flightPhase,
+              ...(f.militaryRole ? { 'Military Role': f.militaryRole } : {}),
+              'Data Source':
+                f.dataQuality === 'MODELED_OSINT'
+                  ? 'MODELED OSINT (not a live track)'
+                  : f.dataQuality === 'SIMULATED_ADSB'
+                  ? 'SIMULATED ADS-B (offline fallback)'
+                  : 'LIVE ADS-B',
             },
             raw: f,
           });
@@ -1384,7 +1395,9 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       }
 
       const isSeaplane = flight.aircraftCategory === 'SEAPLANE_TWIN_OTTER';
-      const pathColor = isSeaplane
+      const pathColor = flight.isMilitary
+        ? '#f43f5e'
+        : isSeaplane
         ? '#38bdf8'
         : flight.flightDirection === 'INBOUND'
         ? '#10b981'
@@ -1477,7 +1490,9 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       }
 
       const vesselColor =
-        vessel.type === 'tanker'
+        vessel.isMilitary
+          ? '#f43f5e'
+          : vessel.type === 'tanker'
           ? '#f97316'
           : vessel.type === 'cargo'
           ? '#3b82f6'
@@ -1573,8 +1588,18 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
   }, [selectedEntity, flights, vessels, mapLoaded]);
 
   // Viewport reset handler
-  const handleResetView = useCallback((zone: 'MALE' | 'ALL' | 'NORTH' | 'SOUTH') => {
+  const handleResetView = useCallback((zone: 'MALE' | 'ALL' | 'NORTH' | 'SOUTH' | 'IOR') => {
     if (!mapRef.current) return;
+
+    if (zone === 'IOR') {
+      mapRef.current.flyTo({
+        center: [70.0, 2.0],
+        zoom: 3.4,
+        pitch: 0,
+        bearing: 0,
+      });
+      return;
+    }
 
     if (zone === 'MALE') {
       mapRef.current.flyTo({

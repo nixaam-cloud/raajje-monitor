@@ -20,7 +20,7 @@ import HorizontalScrollContainer from '../dashboard/HorizontalScrollContainer';
 interface MapControlsProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onResetView: (zone: 'MALE' | 'ALL' | 'NORTH' | 'SOUTH') => void;
+  onResetView: (zone: 'MALE' | 'ALL' | 'NORTH' | 'SOUTH' | 'IOR') => void;
 }
 
 export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapControlsProps) {
@@ -199,6 +199,16 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
           title="Focus on Southern Atolls"
         >
           SOUTH
+        </button>
+        <button
+          onClick={() => {
+            playClick();
+            onResetView('IOR');
+          }}
+          className="px-2 py-1 text-[11px] font-mono text-rose-300 hover:text-rose-200 hover:bg-slate-800/60 rounded"
+          title="Indian Ocean wide view: shipping lanes, naval and air activity"
+        >
+          INDIAN OCEAN
         </button>
 
         <div className="w-[1px] h-4 bg-slate-800 mx-1" />

@@ -28,7 +28,9 @@ export default function MaritimePanel({ vessels = [] }: MaritimePanelProps) {
   const { playClick, playTargetLock } = useSoundEffects();
 
   const filteredVessels = vessels.filter((v) => {
-    const matchesFilter = filterType === 'all' || v.type === filterType;
+    const matchesFilter =
+      filterType === 'all' ||
+      (filterType === 'military' ? !!v.isMilitary : v.type === filterType);
     const matchesSearch =
       v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       v.mmsi.includes(searchQuery) ||
@@ -36,6 +38,8 @@ export default function MaritimePanel({ vessels = [] }: MaritimePanelProps) {
       v.zone.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
+
+  const militaryCount = vessels.filter((v) => v.isMilitary).length;
 
   const handleSelectVessel = (v: MaritimeVessel) => {
     playTargetLock();
@@ -58,6 +62,7 @@ export default function MaritimePanel({ vessels = [] }: MaritimePanelProps) {
         Callsign: v.callsign,
         Flag: `${v.flag} (${v.flagCode})`,
         Type: v.typeName,
+        'Data Source': v.dataQuality === 'MODELED_OSINT' ? 'MODELED OSINT (not a live track)' : 'SIMULATED AIS',
         'Speed (SOG)': `${v.sog} knots`,
         'Course (COG)': `${v.cog}°`,
         Draft: `${v.draftMeters} m`,
@@ -183,7 +188,7 @@ export default function MaritimePanel({ vessels = [] }: MaritimePanelProps) {
           </div>
 
           <HorizontalScrollContainer className="w-full pb-1 text-[10px]">
-            {['all', 'tanker', 'cargo', 'coast_guard', 'rtl_ferry', 'safari_boat', 'fishing_dhoni'].map(
+            {['all', 'military', 'tanker', 'cargo', 'coast_guard', 'rtl_ferry', 'safari_boat', 'fishing_dhoni'].map(
               (cat) => (
                 <button
                   key={cat}
@@ -197,7 +202,7 @@ export default function MaritimePanel({ vessels = [] }: MaritimePanelProps) {
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  {cat.replace('_', ' ')}
+                  {cat === 'military' ? `⚔ military (${militaryCount})` : cat.replace('_', ' ')}
                 </button>
               )
             )}
@@ -213,8 +218,11 @@ export default function MaritimePanel({ vessels = [] }: MaritimePanelProps) {
               className="p-2 rounded bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800/70 hover:border-cyan-500/40 cursor-pointer transition-all space-y-1 group"
             >
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-100 group-hover:text-cyan-300 truncate max-w-[190px]">
-                  {v.name}
+                <span className="font-bold text-slate-100 group-hover:text-cyan-300 truncate max-w-[190px] flex items-center gap-1">
+                  {v.isMilitary && (
+                    <span className="text-[8px] px-1 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 shrink-0">MIL</span>
+                  )}
+                  <span className="truncate">{v.name}</span>
                 </span>
                 <span className="text-[10px] text-cyan-400 font-bold">
                   {v.sog} kts // {v.cog}°
