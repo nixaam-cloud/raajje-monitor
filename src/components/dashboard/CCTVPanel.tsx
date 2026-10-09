@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useMonitorStore } from '@/store/useMonitorStore';
 import { useSoundEffects } from '@/hooks/useSoundEffects';
 import { MALDIVES_CCTV_FEEDS, CCTVFeed, CCTVCategory } from '@/data/cctvFeeds';
+import CCTVPlayer from './CCTVPlayer';
 import {
   Video,
   Search,
@@ -168,13 +169,11 @@ export default function CCTVPanel() {
               onClick={() => handleSelectCamera(cam)}
               className="relative aspect-video rounded-lg overflow-hidden border border-slate-800 hover:border-rose-500/80 transition-all cursor-pointer group bg-black shadow-lg"
             >
-              <video
-                src={cam.streamUrl}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              <CCTVPlayer
+                feed={cam}
+                compact={true}
+                showHUD={false}
+                className="group-hover:scale-105 transition-transform duration-300"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
 

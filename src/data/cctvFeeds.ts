@@ -52,7 +52,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    streamUrl: '',
     youtubeId: 'L_LUpnjgPso', // Live ocean/coastal stream fallback
     description: 'Real-time traffic flow surveillance monitoring commuter transit between Malé City and Sinamalé Bridge ramp.',
     zone: 'Greater Malé Metropolitan',
@@ -81,7 +81,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    streamUrl: '',
     description: 'High-elevation panoramic over-water crossing camera monitoring marine chokepoint transit under main navigation arch.',
     zone: 'Greater Malé Metropolitan',
     telemetry: {
@@ -109,7 +109,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
+    streamUrl: '',
     description: 'Airport connector roundabout surveillance tracking transit to Velana International Airport terminals.',
     zone: 'Velana International Airport Perimeter',
     telemetry: {
@@ -137,7 +137,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+    streamUrl: '',
     description: 'Expressway four-lane dual carriageway monitoring speeding, bus transit lanes, and weather swell ocean spray.',
     zone: 'Hulhumalé Expressway Corridor',
     telemetry: {
@@ -165,7 +165,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '4K',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    streamUrl: '',
     description: 'Municipal smart city surveillance grid overlooking Central Park civic square, synthetic track, and municipal hub.',
     zone: 'Hulhumalé Smart City Grid',
     telemetry: {
@@ -193,7 +193,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    streamUrl: '',
     description: 'Maldives Ports Limited (MPL) container ship gantry crane operations and harbor channel vessel entry.',
     zone: 'Port of Malé Maritime Sector',
     telemetry: {
@@ -221,7 +221,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4',
+    streamUrl: '',
     description: 'Atoll cargo dhoni loading basin, fuel bunkering quayside, and industrial slipway surveillance.',
     zone: 'Port of Malé Maritime Sector',
     telemetry: {
@@ -249,7 +249,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '4K',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+    streamUrl: '',
     description: 'Aviation security feed monitoring world largest seaplane floatplane water aerodrome and main commercial runway.',
     zone: 'Velana International Airport (VRMM)',
     telemetry: {
@@ -278,7 +278,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     fps: 30,
     streamType: 'youtube',
     youtubeId: 'L_LUpnjgPso', // Live ocean/coastal stream
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+    streamUrl: '',
     description: 'Skyline-linked coastal marine webcam observing house reef sea conditions, sea turtles, and ocean swells.',
     zone: 'Northern Atolls Marine Protected Area',
     telemetry: {
@@ -306,7 +306,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    streamUrl: '',
     description: 'High-definition ocean webcam monitoring southern sandbank wave refraction and incoming swell energy.',
     zone: 'Central Atolls Barrier Lagoon',
     telemetry: {
@@ -334,7 +334,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    streamUrl: '',
     description: 'Overlooking outer barrier reef breaker zone, inter-atoll safari yachts, and live weather conditions.',
     zone: 'North Malé Outer Reef Barrier',
     telemetry: {
@@ -362,7 +362,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
+    streamUrl: '',
     description: 'Surfline marine camera pointing eastward into Kaashidhoo sea lane tracking swell sets, wave height, and tides.',
     zone: 'North Malé Sea Corridor',
     telemetry: {
@@ -390,7 +390,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '4K',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+    streamUrl: '',
     description: 'Marine conservation research station monitoring plankton blooms, manta ray aggregations, and eco-tour vessel compliance.',
     zone: 'Baa Atoll UNESCO Biosphere',
     telemetry: {
@@ -418,7 +418,7 @@ export const MALDIVES_CCTV_FEEDS: CCTVFeed[] = [
     resolution: '1080p',
     fps: 30,
     streamType: 'demo',
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+    streamUrl: '',
     description: 'Southernmost surveillance checkpoint monitoring equatorial maritime traffic, Gan airport link, and regional harbor.',
     zone: 'Addu City Southern Strategic SLOC',
     telemetry: {

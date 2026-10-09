@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useMonitorStore } from '@/store/useMonitorStore';
 import { useSoundEffects } from '@/hooks/useSoundEffects';
 import { MALDIVES_CCTV_FEEDS, CCTVFeed } from '@/data/cctvFeeds';
+import CCTVPlayer from './CCTVPlayer';
 import {
   Video,
   X,
@@ -199,31 +200,13 @@ export default function CCTVModal() {
       {/* 2. Live Video Player Screen */}
       {!isMinimized && (
         <div className="relative w-full aspect-video bg-black overflow-hidden group">
-          {/* Video Stream Element */}
-          <video
-            ref={videoRef}
-            src={activeCam.streamUrl}
-            autoPlay
-            loop
-            muted
-            playsInline
-            className={`w-full h-full object-cover transition-transform duration-200 ${
-              nightVision
-                ? 'brightness-125 contrast-150 hue-rotate-[90deg] saturate-200'
-                : ''
-            }`}
-            style={{
-              transform: `scale(${digitalZoom})`,
-            }}
+          {/* Tactical & Live CCTV Stream Player Engine */}
+          <CCTVPlayer
+            feed={activeCam}
+            nightVision={nightVision}
+            digitalZoom={digitalZoom}
+            showHUD={true}
           />
-
-          {/* Optical Vignette & Scanline Overlay */}
-          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_60%,rgba(0,0,0,0.65)_100%)]" />
-
-          {/* Night Vision Green Tint Matrix */}
-          {nightVision && (
-            <div className="absolute inset-0 pointer-events-none bg-emerald-950/20 mix-blend-color-dodge" />
-          )}
 
           {/* Tactical Crosshair Reticle & Targeting Grid */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
