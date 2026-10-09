@@ -582,7 +582,10 @@ export async function GET() {
             title: title || rawTitle,
             source: sourceName,
             link: item.link || 'https://news.google.com',
-            pubDate: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+            pubDate: (() => {
+              const d = new Date(item.isoDate || item.pubDate || '');
+              return Number.isFinite(d.getTime()) ? d.toISOString() : new Date(0).toISOString();
+            })(),
             category: geo.locationName ? 'LOCAL' : category,
             severity,
             atollTag: geo.atollTag,
@@ -598,10 +601,18 @@ export async function GET() {
     // Google News fetch error fallback
   }
 
-  // Combine live Google News with high-density curated local items if needed
+  // Google News surfaces older stories; keep only recent ones so nothing weeks-old appears as an event
+  const MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  const recentNews = aggregatedNews.filter((item) => {
+    const ts = new Date(item.pubDate).getTime();
+    return Number.isFinite(ts) && nowMs - ts <= MAX_AGE_MS && ts - nowMs < 10 * 60 * 1000;
+  });
+
+  // Curated fallback has synthetic timestamps, so only use it when live news is entirely unavailable
   const finalNews = [
-    ...aggregatedNews,
-    ...(aggregatedNews.length < 15 ? FALLBACK_NEWS : []),
+    ...recentNews,
+    ...(recentNews.length === 0 ? FALLBACK_NEWS : []),
   ];
 
   // De-duplicate by title similarity

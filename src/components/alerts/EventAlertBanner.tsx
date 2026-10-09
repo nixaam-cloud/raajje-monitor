@@ -22,8 +22,20 @@ interface EventAlertBannerProps {
   weather?: WeatherTelemetry;
 }
 
-const SEEN_STORAGE_KEY = 'rm_seen_news_ids_v2';
+const SEEN_STORAGE_KEY = 'rm_seen_news_ids_v3';
 const ALERT_TIMEOUT_MS = 12000;
+// Only articles published within this window are considered "new events" worth alerting on
+const FRESH_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+function isFreshArticle(item: NewsItem): boolean {
+  // Curated fallback items have synthetic timestamps; never alert on them
+  if (item.id.startsWith('local-news-') || item.id.startsWith('news-nat-')) return false;
+  const ts = new Date(item.pubDate).getTime();
+  if (!Number.isFinite(ts)) return false;
+  const age = Date.now() - ts;
+  // Reject stale items and items dated implausibly in the future
+  return age >= -5 * 60 * 1000 && age <= FRESH_WINDOW_MS;
+}
 
 export default function EventAlertBanner({ news = [], weather }: EventAlertBannerProps) {
   const {
@@ -81,15 +93,22 @@ export default function EventAlertBanner({ news = [], weather }: EventAlertBanne
     }
 
     // Inspect incoming news items for any unseen events
-    const newArrivals = news.filter((item) => !seenIdsRef.current.has(item.id));
+    const unseen = news.filter((item) => !seenIdsRef.current.has(item.id));
 
-    if (newArrivals.length > 0) {
-      // Play audible alert warning chirp
-      playAlertChirp();
+    if (unseen.length > 0) {
+      // Everything unseen is remembered, but only genuinely fresh items trigger alerts
+      unseen.forEach((item) => seenIdsRef.current.add(item.id));
+      const newArrivals = unseen
+        .filter(isFreshArticle)
+        .sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
+
+      if (newArrivals.length > 0) {
+        // Play audible alert warning chirp
+        playAlertChirp();
+      }
 
       // Dispatch alert for each new arrival (up to top 3 newest to avoid visual overload)
       newArrivals.slice(0, 3).forEach((item) => {
-        seenIdsRef.current.add(item.id);
 
         const alert: EventAlert = {
           id: item.id,
