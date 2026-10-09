@@ -286,6 +286,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
   const newsMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
   const cctvMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
   const lastMarkerClickTimeRef = useRef<number>(0);
+  const latestFlightsRef = useRef<Map<string, AviationFlight>>(new Map());
 
   const {
     showVessels,
@@ -1241,6 +1242,8 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       }
     });
 
+    flights.forEach((f) => latestFlightsRef.current.set(f.id, f));
+
     flights.forEach((f) => {
       const existing = flightMarkersRef.current.get(f.id);
 
@@ -1249,16 +1252,9 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       const airline = resolveAirline(f.callsign, f.operator);
       const flightNumber = formatFlightNumber(f.callsign, airline);
       const shortRoute = formatShortRoute(f.origin, f.destination, f.originCode, f.destinationCode);
-
-      const routeLabel = f.isMilitary
+      const labelCode = f.isMilitary
         ? 'MIL'
-        : f.flightDirection === 'INBOUND'
-          ? '➔ MLE'
-          : f.flightDirection === 'OUTBOUND'
-          ? (shortRoute.to || 'OUT')
-          : f.flightDirection === 'DOMESTIC'
-          ? (shortRoute.to || 'DOM')
-          : `${shortRoute.from}➔${shortRoute.to}`;
+        : (airline.code || f.callsign.slice(0, 2)).slice(0, 2).toUpperCase();
 
       const routeColorClass = f.isMilitary
         ? 'text-rose-400'
@@ -1270,15 +1266,27 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           ? 'text-purple-300'
           : 'text-slate-300';
 
+      const routeText = f.isMilitary && (!shortRoute.from && !shortRoute.to)
+        ? (f.airwaySector || 'PATROL AREA')
+        : `${shortRoute.from || f.originCode || 'ORIG'} ➔ ${shortRoute.to || f.destinationCode || 'DEST'}`;
+
       if (existing) {
         existing.marker.setLngLat(f.coordinates);
         const icon = existing.el.querySelector('.flight-icon') as HTMLElement | null;
         if (icon) {
           icon.style.transform = `rotate(${f.headingDeg}deg)`;
         }
+        const altEl = existing.el.querySelector('.flight-hover-alt') as HTMLElement | null;
+        if (altEl) altEl.textContent = `${f.altitudeFt.toLocaleString()} ft`;
+        const spdEl = existing.el.querySelector('.flight-hover-spd') as HTMLElement | null;
+        if (spdEl) spdEl.textContent = `${f.velocityKts} kts`;
+        const hdgEl = existing.el.querySelector('.flight-hover-hdg') as HTMLElement | null;
+        if (hdgEl) hdgEl.textContent = `${f.headingDeg}°`;
+        const phaseEl = existing.el.querySelector('.flight-hover-phase') as HTMLElement | null;
+        if (phaseEl) phaseEl.textContent = f.flightPhase;
       } else {
         const el = document.createElement('div');
-        el.className = 'flight-marker cursor-pointer group relative flex items-center select-none';
+        el.className = 'flight-marker cursor-pointer group relative flex items-center select-none hover:z-50';
         el.style.width = '28px';
         el.style.height = '28px';
 
@@ -1288,12 +1296,62 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
               <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" fill="${flightColor}" fill-opacity="0.35"></path>
             </svg>
           </div>
-          <div class="flight-badge flex items-center gap-1 absolute left-7 -top-1 z-20 bg-slate-950/90 border border-slate-700/80 hover:border-cyan-400 px-1.5 py-0.5 rounded shadow-lg text-[9px] font-mono leading-none whitespace-nowrap pointer-events-auto backdrop-blur-md select-none transition-all group-hover:scale-105 group-hover:z-50">
-            <span class="w-3.5 h-3.5 rounded flex items-center justify-center font-bold text-[7px] text-white shrink-0 shadow-sm" style="background-color: ${airline.brandColor};">
-              ${airline.code.slice(0, 2)}
-            </span>
-            <span class="text-slate-100 font-bold tracking-tight">${flightNumber}</span>
-            <span class="font-bold ${routeColorClass}">${routeLabel}</span>
+
+          <!-- Resting Compact Label (Only displays airline code like EK, Q2) -->
+          <div class="flight-pill flex items-center gap-1 absolute left-6 -top-0.5 z-10 px-1 py-0.5 rounded bg-slate-950/85 border border-slate-700/80 shadow text-[9px] font-mono font-bold leading-none whitespace-nowrap pointer-events-auto backdrop-blur-sm transition-all group-hover:opacity-0 group-hover:pointer-events-none" style="border-left: 2px solid ${airline.brandColor}; color: ${flightColor};">
+            <span>${labelCode}</span>
+          </div>
+
+          <!-- Hover Details Popover -->
+          <div class="flight-hover-card hidden group-hover:flex flex-col absolute left-6 -top-3 z-50 bg-slate-950/95 border border-cyan-500/70 p-2.5 rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.85),0_0_15px_rgba(6,182,212,0.3)] text-[10px] font-mono whitespace-nowrap pointer-events-auto backdrop-blur-md min-w-[210px] max-w-[280px] gap-1.5 transition-all">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5">
+                <span class="px-1.5 py-0.5 rounded text-[8px] font-bold text-white shadow-sm shrink-0" style="background-color: ${airline.brandColor};">
+                  ${labelCode}
+                </span>
+                <span class="text-white font-bold text-[11px] tracking-tight">${flightNumber}</span>
+              </div>
+              <span class="text-[8px] px-1 py-0.5 rounded font-bold uppercase ${f.isMilitary ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : f.flightDirection === 'INBOUND' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : f.flightDirection === 'OUTBOUND' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'}">
+                ${f.isMilitary ? 'MILITARY' : f.flightDirection}
+              </span>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 text-[9px] text-slate-300 border-b border-slate-800/80 pb-1">
+              <span class="truncate max-w-[125px] font-medium text-slate-200">${airline.name || f.operator}</span>
+              <span class="text-slate-400 shrink-0 font-mono">${f.aircraftType}</span>
+            </div>
+
+            <div class="flex items-center justify-between text-[9px] text-slate-300">
+              <span class="text-slate-500 font-semibold">ROUTE</span>
+              <span class="font-bold ${routeColorClass}">${routeText}</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[9px] bg-slate-900/90 px-2 py-1.5 rounded border border-slate-800/90">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500">ALT</span>
+                <span class="text-cyan-300 font-bold flight-hover-alt">${f.altitudeFt.toLocaleString()} ft</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500">SPD</span>
+                <span class="text-emerald-300 font-bold flight-hover-spd">${f.velocityKts} kts</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500">HDG</span>
+                <span class="text-slate-300 flight-hover-hdg">${f.headingDeg}°</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500">PHASE</span>
+                <span class="text-purple-300 font-bold flight-hover-phase">${f.flightPhase}</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-[8px] text-cyan-400/90 pt-0.5 border-t border-slate-800/60">
+              <span class="text-slate-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                Tracked
+              </span>
+              <span class="text-cyan-400 underline font-semibold flex items-center gap-0.5">Click for full dossier ➔</span>
+            </div>
           </div>
         `;
 
@@ -1303,42 +1361,43 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           e.stopPropagation();
           lastMarkerClickTimeRef.current = Date.now();
           playTargetLock();
+          const targetFlight = latestFlightsRef.current.get(f.id) || f;
           setSelectedEntity({
             type: 'flight',
-            id: f.id,
-            title: `${f.callsign} // ${f.operator}`,
-            subtitle: `${f.aircraftType} (${f.aircraftCategory})`,
+            id: targetFlight.id,
+            title: `${targetFlight.callsign} // ${targetFlight.operator}`,
+            subtitle: `${targetFlight.aircraftType} (${targetFlight.aircraftCategory})`,
             badge: {
-              text: `${f.flightDirection} // ${f.flightPhase}`,
-              variant: f.flightDirection === 'INBOUND' ? 'emerald' : f.flightDirection === 'OUTBOUND' ? 'amber' : 'cyan',
+              text: `${targetFlight.flightDirection} // ${targetFlight.flightPhase}`,
+              variant: targetFlight.flightDirection === 'INBOUND' ? 'emerald' : targetFlight.flightDirection === 'OUTBOUND' ? 'amber' : 'cyan',
             },
-            coordinates: f.coordinates,
+            coordinates: targetFlight.coordinates,
             telemetry: {
-              Callsign: f.callsign,
-              ...(f.registration ? { 'Registration / Tail': f.registration } : {}),
-              ...(f.flightNumber ? { 'Flight Number': f.flightNumber } : {}),
-              ICAO24: f.icao24,
-              Operator: f.operator,
-              Aircraft: f.aircraftType,
-              Category: f.aircraftCategory,
-              'Flight Direction': `${f.flightDirection} ${f.flightDirection === 'INBOUND' ? '(ARRIVING TO MALDIVES)' : f.flightDirection === 'OUTBOUND' ? '(DEPARTING FROM MALDIVES)' : f.flightDirection === 'DOMESTIC' ? '(DOMESTIC MALDIVES)' : '(TRANSIT OVERFLIGHT)'}`,
-              Route: `${f.origin} ➔ ${f.destination}`,
-              Altitude: `${f.altitudeFt.toLocaleString()} ft`,
-              Speed: `${f.velocityKts} knots`,
-              Heading: `${f.headingDeg}°`,
-              VerticalRate: `${f.verticalRateFpm} ft/min`,
-              Squawk: f.squawk,
-              Sector: f.airwaySector || 'Maldives Airspace',
-              Phase: f.flightPhase,
-              ...(f.militaryRole ? { 'Military Role': f.militaryRole } : {}),
+              Callsign: targetFlight.callsign,
+              ...(targetFlight.registration ? { 'Registration / Tail': targetFlight.registration } : {}),
+              ...(targetFlight.flightNumber ? { 'Flight Number': targetFlight.flightNumber } : {}),
+              ICAO24: targetFlight.icao24,
+              Operator: targetFlight.operator,
+              Aircraft: targetFlight.aircraftType,
+              Category: targetFlight.aircraftCategory,
+              'Flight Direction': `${targetFlight.flightDirection} ${targetFlight.flightDirection === 'INBOUND' ? '(ARRIVING TO MALDIVES)' : targetFlight.flightDirection === 'OUTBOUND' ? '(DEPARTING FROM MALDIVES)' : targetFlight.flightDirection === 'DOMESTIC' ? '(DOMESTIC MALDIVES)' : '(TRANSIT OVERFLIGHT)'}`,
+              Route: `${targetFlight.origin} ➔ ${targetFlight.destination}`,
+              Altitude: `${targetFlight.altitudeFt.toLocaleString()} ft`,
+              Speed: `${targetFlight.velocityKts} knots`,
+              Heading: `${targetFlight.headingDeg}°`,
+              VerticalRate: `${targetFlight.verticalRateFpm} ft/min`,
+              Squawk: targetFlight.squawk,
+              Sector: targetFlight.airwaySector || 'Maldives Airspace',
+              Phase: targetFlight.flightPhase,
+              ...(targetFlight.militaryRole ? { 'Military Role': targetFlight.militaryRole } : {}),
               'Data Source':
-                f.dataQuality === 'MODELED_OSINT'
+                targetFlight.dataQuality === 'MODELED_OSINT'
                   ? 'MODELED OSINT (not a live track)'
-                  : f.dataQuality === 'SIMULATED_ADSB'
+                  : targetFlight.dataQuality === 'SIMULATED_ADSB'
                   ? 'SIMULATED ADS-B (offline fallback)'
                   : 'LIVE ADS-B',
             },
-            raw: f,
+            raw: targetFlight,
           });
         });
 
