@@ -1,0 +1,43 @@
+name: Daily Update TV Playlist
+
+on:
+  schedule:
+    # Runs automatically every day at 04:00 UTC (09:00 AM Maldives MVT)
+    - cron: '0 4 * * *'
+  workflow_dispatch: # Allows manual 1-click trigger from GitHub Actions
+
+permissions:
+  contents: write
+
+jobs:
+  update-playlist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run playlist update script
+        run: npm run update-playlist
+        env:
+          TV_PLAYLIST_URL: ${{ secrets.TV_PLAYLIST_URL || 'https://hilaytv.xyz/play.m3u' }}
+
+      - name: Commit and push changes if playlist updated
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          if [ -n "$(git status --porcelain public/data/play.m3u)" ]; then
+            git add public/data/play.m3u
+            git commit -m "chore(tv): daily automated update of TV playlist (play.m3u) [skip ci]"
+            git push origin main
+          else
+            echo "No changes in play.m3u, playlist is already up to date."
+          fi

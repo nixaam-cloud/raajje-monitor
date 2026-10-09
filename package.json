@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "update-playlist": "node scripts/update-playlist.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.4.0",

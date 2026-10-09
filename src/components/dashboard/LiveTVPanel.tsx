@@ -68,13 +68,17 @@ export default function LiveTVPanel() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
 
-  // 1. Fetch channels & groups from API
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/tv')
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // 1. Fetch channels & groups from API (supports force-refresh)
+  const loadChannels = (force = false) => {
+    if (force) setIsRefreshing(true);
+    else setLoading(true);
+
+    fetch(`/api/tv${force ? '?refresh=1' : ''}`)
       .then((r) => r.json())
       .then((data) => {
-        if (cancelled) return;
         const list: TVChannel[] = data.channels && data.channels.length > 0 ? data.channels : FALLBACK_CHANNELS;
         const grpList: TVGroupInfo[] = data.groups && data.groups.length > 0 ? data.groups : [
           { name: 'HilayTV | Dhivehi', count: list.filter((c) => c.isMaldivian).length, isMaldivian: true },
@@ -82,30 +86,34 @@ export default function LiveTVPanel() {
 
         setChannels(list);
         setGroups(grpList);
+        if (data.lastUpdated) {
+          setLastUpdated(data.lastUpdated);
+        }
 
-        // Check if HilayTV | Dhivehi exists in playlist
         const hasDhivehi = grpList.some((g) => g.name.toLowerCase() === 'hilaytv | dhivehi');
         const defaultGrp = hasDhivehi ? 'HilayTV | Dhivehi' : 'MALDIVES_ALL';
-        setSelectedGroup(defaultGrp);
+        setSelectedGroup((prev) => (prev ? prev : defaultGrp));
 
-        // Pick first channel from this group
-        const first = list.find((c) => (hasDhivehi ? c.group === 'HilayTV | Dhivehi' : c.isMaldivian)) || list[0];
-        if (first) setActiveChannelId(first.id);
+        setActiveChannelId((prev) => {
+          if (prev && list.some((c) => c.id === prev)) return prev;
+          const first = list.find((c) => (hasDhivehi ? c.group === 'HilayTV | Dhivehi' : c.isMaldivian)) || list[0];
+          return first ? first.id : null;
+        });
       })
       .catch((err) => {
-        if (cancelled) return;
         setLoadError(String(err));
         setChannels(FALLBACK_CHANNELS);
         setSelectedGroup('HilayTV | Dhivehi');
         setActiveChannelId(FALLBACK_CHANNELS[0].id);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
+        setIsRefreshing(false);
       });
+  };
 
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    loadChannels(false);
   }, []);
 
   const activeChannel = useMemo(() => {
@@ -235,14 +243,39 @@ export default function LiveTVPanel() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" />
           </span>
-          <h3 className="font-bold text-xs tracking-wider text-slate-100 flex items-center gap-1.5">
-            <Tv className="w-3.5 h-3.5 text-cyan-400" />
-            LIVE TV // MALDIVES & GLOBAL
-          </h3>
+          <div>
+            <h3 className="font-bold text-xs tracking-wider text-slate-100 flex items-center gap-1.5">
+              <Tv className="w-3.5 h-3.5 text-cyan-400" />
+              LIVE TV // MALDIVES & GLOBAL
+            </h3>
+            <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-emerald-400/90 font-semibold">DAILY AUTO-SYNC</span>
+              {lastUpdated && (
+                <span className="text-slate-500">
+                  • {new Date(lastUpdated).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        <span className="text-[10px] text-cyan-400/90 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40">
-          {channels.length} CHANNELS
-        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => {
+              playClick();
+              loadChannels(true);
+            }}
+            disabled={isRefreshing || loading}
+            title="Force re-sync latest M3U playlist from source"
+            className="flex items-center gap-1 text-[10px] text-cyan-300 hover:text-cyan-100 bg-cyan-950/50 hover:bg-cyan-900/60 px-2 py-0.5 rounded border border-cyan-800/50 transition-colors disabled:opacity-50 font-mono shadow-sm"
+          >
+            <RefreshCw className={`w-2.5 h-2.5 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+            <span>SYNC</span>
+          </button>
+          <span className="text-[10px] text-cyan-400/90 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40 font-mono">
+            {channels.length} CH
+          </span>
+        </div>
       </div>
 
       {/* 2. Video Screen Player */}
