@@ -166,7 +166,7 @@ export default function EventAlertBanner({ news = [], weather }: EventAlertBanne
     }
   }, [weather, addAlert, playAlertChirp]);
 
-  const handleInspectNews = (alert: EventAlert) => {
+  const handleInspectNews = useCallback((alert: EventAlert) => {
     playClick();
     setLeftPanelOpen(true);
     setSelectedEntity({
@@ -193,9 +193,9 @@ export default function EventAlertBanner({ news = [], weather }: EventAlertBanne
       raw: alert.rawNews,
     });
     dismissAlert(alert.id);
-  };
+  }, [playClick, setLeftPanelOpen, setSelectedEntity, dismissAlert]);
 
-  const handleFocusLocation = (alert: EventAlert) => {
+  const handleFocusLocation = useCallback((alert: EventAlert) => {
     playClick();
     if (alert.coordinates) {
       setFlyToTarget({
@@ -203,7 +203,7 @@ export default function EventAlertBanner({ news = [], weather }: EventAlertBanne
       });
     }
     handleInspectNews(alert);
-  };
+  }, [playClick, setFlyToTarget, handleInspectNews]);
 
   if (!activeAlerts || activeAlerts.length === 0) return null;
 
@@ -251,26 +251,40 @@ function AlertToastItem({ alert, onDismiss, onInspect, onFocusMap }: AlertToastI
     ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
     : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
 
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
+  const remainingMsRef = useRef<number>(ALERT_TIMEOUT_MS);
+  const isDismissedRef = useRef(false);
+
   // Auto-dismiss timer with pause on hover
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || isDismissedRef.current) return;
 
-    const intervalMs = 100;
-    const decrement = (intervalMs / ALERT_TIMEOUT_MS) * 100;
+    const startTimestamp = Date.now();
+    const duration = remainingMsRef.current;
 
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev <= decrement) {
-          clearInterval(interval);
-          onDismiss();
-          return 0;
-        }
-        return prev - decrement;
-      });
-    }, intervalMs);
+      const elapsed = Date.now() - startTimestamp;
+      const remaining = Math.max(0, duration - elapsed);
+      const nextProgress = Math.max(0, (remaining / ALERT_TIMEOUT_MS) * 100);
 
-    return () => clearInterval(interval);
-  }, [isPaused, onDismiss]);
+      setProgress(nextProgress);
+
+      if (remaining <= 0 && !isDismissedRef.current) {
+        isDismissedRef.current = true;
+        clearInterval(interval);
+        setTimeout(() => {
+          onDismissRef.current?.();
+        }, 0);
+      }
+    }, 100);
+
+    return () => {
+      clearInterval(interval);
+      remainingMsRef.current = Math.max(0, duration - (Date.now() - startTimestamp));
+    };
+  }, [isPaused]);
 
   return (
     <div
