@@ -16,6 +16,7 @@ import {
   Minus,
   Wifi,
   AlertTriangle,
+  Globe,
 } from 'lucide-react';
 import HorizontalScrollContainer from '../dashboard/HorizontalScrollContainer';
 
@@ -51,10 +52,10 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
   return (
     <aside
       aria-label="Tactical Map Controls"
-      className="absolute bottom-[calc(env(safe-area-inset-bottom,0px)+60px)] sm:bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 pointer-events-auto max-w-[96vw] select-none"
+      className="tactical-map-controls absolute left-1/2 -translate-x-1/2 z-20 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 pointer-events-auto max-w-[98vw] select-none"
     >
       {/* 1. Tactical Layer Quick Dock (Scrollable horizontally on mobile to prevent spilling) */}
-      <div className="w-full max-w-[96vw] sm:max-w-none flex items-center px-1.5 sm:px-3 py-1 rounded-xl tactical-panel border border-slate-800/90 shadow-2xl backdrop-blur-xl">
+      <div className="w-full max-w-[98vw] sm:max-w-none flex items-center px-1.5 sm:px-3 py-1 rounded-xl tactical-panel border border-slate-800/90 shadow-2xl backdrop-blur-xl">
         <HorizontalScrollContainer className="flex items-center gap-1 sm:gap-1.5 w-full">
           <button
             onClick={() => handleToggle('vessels')}
@@ -188,82 +189,86 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
         </HorizontalScrollContainer>
       </div>
 
-      {/* 2. Camera Viewport Shortcuts (Desktop/Tablet) */}
-      <div className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-xl tactical-panel border border-slate-800/80 shadow-2xl backdrop-blur-xl">
-        <button
-          onClick={() => {
-            playClick();
-            onResetView('MALE');
-          }}
-          className="px-2 py-1 text-[11px] font-mono text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded"
-          title="Center on Malé Capital Lagoon"
-        >
-          MALÉ
-        </button>
-        <button
-          onClick={() => {
-            playClick();
-            onResetView('ALL');
-          }}
-          className="px-2 py-1 text-[11px] font-mono text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded"
-          title="Fit All 26 Atolls & EEZ"
-        >
-          FULL EEZ
-        </button>
-        <button
-          onClick={() => {
-            playClick();
-            onResetView('NORTH');
-          }}
-          className="px-2 py-1 text-[11px] font-mono text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded"
-          title="Focus on Northern Atolls"
-        >
-          NORTH
-        </button>
-        <button
-          onClick={() => {
-            playClick();
-            onResetView('SOUTH');
-          }}
-          className="px-2 py-1 text-[11px] font-mono text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded"
-          title="Focus on Southern Atolls"
-        >
-          SOUTH
-        </button>
-        <button
-          onClick={() => {
-            playClick();
-            onResetView('IOR');
-          }}
-          className="px-2 py-1 text-[11px] font-mono text-rose-300 hover:text-rose-200 hover:bg-slate-800/60 rounded"
-          title="Indian Ocean wide view: shipping lanes, naval and air activity"
-        >
-          INDIAN OCEAN
-        </button>
+      {/* 2. Camera Viewport & Tactical Tools Shortcuts (Visible on both Mobile and Desktop) */}
+      <div className="w-full max-w-[98vw] sm:max-w-none sm:w-auto flex items-center px-1.5 sm:px-2.5 py-1 rounded-xl tactical-panel border border-slate-800/80 shadow-2xl backdrop-blur-xl">
+        <HorizontalScrollContainer className="flex items-center gap-1 w-full justify-start sm:justify-center">
+          <button
+            onClick={() => {
+              playClick();
+              onResetView('MALE');
+            }}
+            className="px-2 py-1 text-[10px] sm:text-[11px] font-mono text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded shrink-0 flex items-center gap-1 font-semibold"
+            title="Center on Malé Capital Lagoon"
+          >
+            <span>MALÉ</span>
+          </button>
+          <button
+            onClick={() => {
+              playClick();
+              onResetView('ALL');
+            }}
+            className="px-2 py-1 text-[10px] sm:text-[11px] font-mono text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded shrink-0 flex items-center gap-1 font-semibold"
+            title="Fit All 26 Atolls & EEZ"
+          >
+            <span>FULL EEZ</span>
+          </button>
+          <button
+            onClick={() => {
+              playClick();
+              onResetView('NORTH');
+            }}
+            className="px-2 py-1 text-[10px] sm:text-[11px] font-mono text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded shrink-0 flex items-center gap-1 font-semibold"
+            title="Focus on Northern Atolls"
+          >
+            <span>NORTH</span>
+          </button>
+          <button
+            onClick={() => {
+              playClick();
+              onResetView('SOUTH');
+            }}
+            className="px-2 py-1 text-[10px] sm:text-[11px] font-mono text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded shrink-0 flex items-center gap-1 font-semibold"
+            title="Focus on Southern Atolls"
+          >
+            <span>SOUTH</span>
+          </button>
+          <button
+            onClick={() => {
+              playClick();
+              onResetView('IOR');
+            }}
+            className="px-2 py-1 text-[10px] sm:text-[11px] font-mono text-rose-300 hover:text-rose-200 hover:bg-slate-800/60 rounded shrink-0 flex items-center gap-1 font-semibold"
+            title="Indian Ocean wide view: shipping lanes, naval and air activity"
+          >
+            <Globe className="w-3 h-3 text-rose-400 shrink-0" />
+            <span>INDIAN OCEAN</span>
+          </button>
 
-        <div className="w-[1px] h-4 bg-slate-800 mx-1" />
+          <div className="w-[1px] h-3.5 bg-slate-800 mx-0.5 shrink-0" />
 
-        <button
-          onClick={() => {
-            playClick();
-            onZoomIn();
-          }}
-          className="p-1 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded"
-          title="Zoom In"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => {
-            playClick();
-            onZoomOut();
-          }}
-          className="p-1 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded"
-          title="Zoom Out"
-        >
-          <Minus className="w-3.5 h-3.5" />
-        </button>
+          <button
+            onClick={() => {
+              playClick();
+              onZoomIn();
+            }}
+            className="p-1 text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded shrink-0"
+            title="Zoom In"
+          >
+            <Plus className="w-3.5 h-3.5 text-cyan-400" />
+          </button>
+          <button
+            onClick={() => {
+              playClick();
+              onZoomOut();
+            }}
+            className="p-1 text-slate-300 hover:text-cyan-400 hover:bg-slate-800/60 rounded shrink-0"
+            title="Zoom Out"
+          >
+            <Minus className="w-3.5 h-3.5 text-cyan-400" />
+          </button>
+        </HorizontalScrollContainer>
       </div>
     </aside>
   );
 }
+

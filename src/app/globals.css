@@ -114,3 +114,14 @@ body {
 .maplibregl-ctrl-top-left {
   display: none !important; /* Hide default compass and attribution to keep mobile UI crystal clean */
 }
+
+/* Tactical Map Floating Controls on Mobile and Desktop */
+.tactical-map-controls {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 64px);
+}
+
+@media (min-width: 640px) {
+  .tactical-map-controls {
+    bottom: 1.5rem; /* 24px = sm:bottom-6 */
+  }
+}
