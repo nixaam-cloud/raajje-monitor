@@ -2171,7 +2171,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
 
       {/* Floating Tactical Weather Status Banner on the Map */}
       {showWeatherAlerts && (
-        <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-2.5 px-3.5 py-1.5 rounded-full tactical-panel border shadow-2xl backdrop-blur-md text-[10px] md:text-xs font-mono text-slate-200 select-none animate-in fade-in slide-in-from-top-2 duration-300 ${
+        <div className={`absolute top-12 sm:top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-2.5 px-3.5 py-1.5 rounded-full tactical-panel border shadow-2xl backdrop-blur-md text-[10px] md:text-xs font-mono text-slate-200 select-none animate-in fade-in slide-in-from-top-2 duration-300 ${
           weather?.mmsAlert?.isActiveWarning
             ? 'border-amber-500/50 bg-slate-950/95 shadow-amber-500/10'
             : 'border-cyan-500/40 bg-slate-950/90 shadow-cyan-500/10'
