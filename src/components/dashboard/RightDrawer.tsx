@@ -17,13 +17,14 @@ import TelcoPanel from './TelcoPanel';
 import HorizontalScrollContainer from './HorizontalScrollContainer';
 import { Ship, Plane, CloudLightning, BarChart3, Tv, Video, Wifi, X, ChevronDown, ChevronUp, Map as MapIcon } from 'lucide-react';
 import { MALDIVES_CCTV_FEEDS } from '@/data/cctvFeeds';
-import { NETWORK_OUTAGES } from '@/data/cablesGeoJson';
+import { TelecomTelemetryData } from '@/hooks/useLiveRadar';
 
 interface RightDrawerProps {
   vessels?: MaritimeVessel[];
   flights?: AviationFlight[];
   weather?: WeatherTelemetry;
   macro?: MacroPulse;
+  telecom?: TelecomTelemetryData;
 }
 
 export default function RightDrawer({
@@ -31,6 +32,7 @@ export default function RightDrawer({
   flights = [],
   weather,
   macro,
+  telecom,
 }: RightDrawerProps) {
   const { rightPanelOpen, setRightPanelOpen, activeRightTab, setActiveRightTab } =
     useMonitorStore();
@@ -79,7 +81,7 @@ export default function RightDrawer({
       id: 'telco',
       label: 'TELCO & NET',
       icon: <Wifi className="w-3.5 h-3.5 text-cyan-400" />,
-      badge: NETWORK_OUTAGES.length,
+      badge: telecom && telecom.activeOutages.length > 0 ? telecom.activeOutages.length : 'LIVE',
     },
   ];
 
@@ -213,7 +215,7 @@ export default function RightDrawer({
             {activeRightTab === 'macro' && <TourismMacroCard macro={macro} />}
             {activeRightTab === 'tv' && <LiveTVPanel />}
             {activeRightTab === 'cctv' && <CCTVPanel />}
-            {activeRightTab === 'telco' && <TelcoPanel />}
+            {activeRightTab === 'telco' && <TelcoPanel telecom={telecom} />}
           </div>
         </>
       )}

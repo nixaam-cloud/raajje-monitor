@@ -718,56 +718,8 @@ export interface NetworkOutageIncident {
   startedAt: string;
 }
 
-export const NETWORK_OUTAGES: NetworkOutageIncident[] = [
-  {
-    id: 'outage-baa-01',
-    island: 'Fehendhoo',
-    atoll: 'Baa Atoll',
-    coordinates: [72.9814, 4.8889],
-    operator: 'Dhiraagu',
-    severity: 'DEGRADED',
-    type: 'MICROWAVE_RAIN_FADE',
-    title: 'Baa Fehendhoo Inter-Island Microwave Hop Rain Fade',
-    cause: 'Intense monsoon squall rain fade on 18 GHz inter-island microwave relay between Fulhadhoo and Fehendhoo.',
-    impact: 'Mobile 4G data latency elevated to 165ms; High-speed broadband throttled. Voice calls fallback to 3G.',
-    affectedSubscribers: 1420,
-    etaRecovery: 'Est. 35 mins (awaiting squall line clearance)',
-    backupStatus: 'Secondary 6 GHz low-frequency link active with packet prioritization for emergency services.',
-    startedAt: '42 mins ago',
-  },
-  {
-    id: 'outage-ga-01',
-    island: 'Villingili',
-    atoll: 'Gaafu Alifu Atoll',
-    coordinates: [73.4358, 0.7578],
-    operator: 'Ooredoo',
-    severity: 'MAINTENANCE',
-    type: 'OPTICAL_CORE_UPGRADE',
-    title: 'Gaafu Alifu Villingili Subsea DWDM Optical Patching',
-    cause: 'Scheduled ISP line-card hardware upgrade & optical SFP replacement on southern subsea fiber ring terminal node.',
-    impact: '5G mobile data temporarily switched to microwave bypass ring; peak throughput capped at 100 Mbps.',
-    affectedSubscribers: 2850,
-    etaRecovery: 'Est. 20 mins (completion expected ahead of schedule)',
-    backupStatus: 'Traffic safely rerouted through Dhaalu Kudahuvadhoo microwave bypass loop.',
-    startedAt: '1h 15m ago',
-  },
-  {
-    id: 'outage-lh-01',
-    island: 'Kurendhoo',
-    atoll: 'Lhaviyani Atoll',
-    coordinates: [73.4667, 5.3333],
-    operator: 'Shared Telecom',
-    severity: 'STANDBY_POWER',
-    type: 'ISLAND_POWER_GRID_TRIP',
-    title: 'Lhaviyani Kurendhoo Island Grid Trip (UPS Battery Active)',
-    cause: 'Island utility company generator breaker trip; cell tower successfully switched to smart lithium UPS batteries.',
-    impact: 'Tower emitting at 100% full RF signal. Battery bank capacity at 78% (approx. 4.1 hours reserve time remaining).',
-    affectedSubscribers: 1980,
-    etaRecovery: 'Island utility technicians resetting feeder busbar',
-    backupStatus: 'Smart DC battery bank holding 48V bus stable; backup diesel generator on auto-standby.',
-    startedAt: '55 mins ago',
-  },
-];
+export const NETWORK_OUTAGES: NetworkOutageIncident[] = [];
+
 
 // ─── 7. NATIONAL TELECOM HEALTH METRICS ───
 export const TELECOM_HEALTH_METRICS = {

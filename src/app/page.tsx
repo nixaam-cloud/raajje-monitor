@@ -42,7 +42,7 @@ export default function CockpitPage() {
     setRightPanelOpen,
     setActiveRightTab,
   } = useMonitorStore();
-  const { maritime, aviation, weather, news, macro, refetchNews, isFetchingNews } = useLiveRadar();
+  const { maritime, aviation, weather, news, macro, telecom, refetchNews, isFetchingNews } = useLiveRadar();
   const { playClick } = useSoundEffects();
 
   // On mobile viewports, start with clean unobstructed map view
@@ -103,6 +103,7 @@ export default function CockpitPage() {
           flights={aviation?.flights}
           weather={weather}
           news={news?.feed}
+          telecom={telecom}
         />
 
         {/* 3. Floating Left Intelligence Wire */}
@@ -118,6 +119,7 @@ export default function CockpitPage() {
           flights={aviation?.flights}
           weather={weather}
           macro={macro}
+          telecom={telecom}
         />
 
         {/* 5. Mobile Fixed Bottom Navigation Bar (Always visible with iOS/Android safe-area padding) */}

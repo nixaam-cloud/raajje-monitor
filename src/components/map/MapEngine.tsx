@@ -21,8 +21,8 @@ import {
   MOBILE_COVERAGE_5G_GEOJSON,
   MOBILE_COVERAGE_4G_GEOJSON,
   CELL_TOWERS,
-  NETWORK_OUTAGES,
 } from '@/data/cablesGeoJson';
+import { TelecomTelemetryData } from '@/hooks/useLiveRadar';
 import { WeatherTelemetry } from '@/app/api/weather/route';
 import {
   WEATHER_ZONES_GEOJSON,
@@ -279,9 +279,10 @@ interface MapEngineProps {
   flights?: AviationFlight[];
   weather?: WeatherTelemetry;
   news?: NewsItem[];
+  telecom?: TelecomTelemetryData;
 }
 
-export default function MapEngine({ vessels = [], flights = [], weather, news = [] }: MapEngineProps) {
+export default function MapEngine({ vessels = [], flights = [], weather, news = [], telecom }: MapEngineProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -1439,18 +1440,20 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
     });
   }, [showCCTV, mapLoaded, playTargetLock, setSelectedEntity, setSelectedCCTVId]);
 
-  // Update Network Outage Markers smoothly
+  // Update Live Network Outage Markers smoothly (ZERO SIMULATION - LIVE TELEMETRY ONLY)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    if (!showOutages) {
+    const liveOutages = telecom?.activeOutages || [];
+
+    if (!showOutages || liveOutages.length === 0) {
       outageMarkersRef.current.forEach(({ marker }) => marker.remove());
       outageMarkersRef.current.clear();
       return;
     }
 
-    const currentOutageIds = new Set(NETWORK_OUTAGES.map((o) => o.id));
+    const currentOutageIds = new Set(liveOutages.map((o) => o.id));
 
     outageMarkersRef.current.forEach(({ marker }, id) => {
       if (!currentOutageIds.has(id)) {
@@ -1459,7 +1462,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       }
     });
 
-    NETWORK_OUTAGES.forEach((outage) => {
+    liveOutages.forEach((outage) => {
       if (!outageMarkersRef.current.has(outage.id)) {
         const el = document.createElement('div');
         el.className = 'outage-marker cursor-pointer group relative flex items-center justify-center select-none';
@@ -1469,9 +1472,9 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         const severityColor =
           outage.severity === 'DEGRADED'
             ? '#f59e0b'
-            : outage.severity === 'STANDBY_POWER'
-            ? '#06b6d4'
-            : '#a855f7';
+            : outage.severity === 'CRITICAL'
+            ? '#ef4444'
+            : '#06b6d4';
 
         el.innerHTML = `
           <!-- Pulsing warning ring -->
@@ -1509,9 +1512,9 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
               variant:
                 outage.severity === 'DEGRADED'
                   ? 'amber'
-                  : outage.severity === 'STANDBY_POWER'
-                  ? 'cyan'
-                  : 'purple',
+                  : outage.severity === 'CRITICAL'
+                  ? 'crimson'
+                  : 'cyan',
             },
             coordinates: outage.coordinates,
             telemetry: {
@@ -1520,12 +1523,11 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
               Operator: outage.operator,
               Severity: outage.severity,
               Category: outage.type.replace(/_/g, ' '),
-              'Affected Subscribers': outage.affectedSubscribers.toLocaleString(),
-              'Estimated Recovery': outage.etaRecovery,
+              Title: outage.title,
               'Technical Cause': outage.cause,
               'Impact Assessment': outage.impact,
-              'Backup & Failover': outage.backupStatus,
-              'Incident Duration': outage.startedAt,
+              'Telemetry Source': outage.source,
+              'Incident Detection': outage.startedAt,
             },
           });
         });
@@ -1537,7 +1539,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         outageMarkersRef.current.set(outage.id, { marker, el });
       }
     });
-  }, [showOutages, mapLoaded, playTargetLock, setSelectedEntity]);
+  }, [showOutages, mapLoaded, telecom, playTargetLock, setSelectedEntity]);
 
   // Update Vessel Markers smoothly
   useEffect(() => {

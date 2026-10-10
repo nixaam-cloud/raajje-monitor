@@ -48,6 +48,76 @@ interface NewsResponse {
   feed: NewsItem[];
 }
 
+export interface TelecomTelemetryData {
+  timestamp: string;
+  source: string;
+  isSimulated: boolean;
+  nationalStatus: 'OPERATIONAL' | 'DEGRADED';
+  summary: string;
+  activeOutages: Array<{
+    id: string;
+    island: string;
+    atoll: string;
+    coordinates: [number, number];
+    operator: string;
+    severity: 'CRITICAL' | 'DEGRADED' | 'MAINTENANCE';
+    type: string;
+    title: string;
+    cause: string;
+    impact: string;
+    affectedSubscribers?: number;
+    startedAt: string;
+    source: string;
+  }>;
+  operators: {
+    dhiraagu: {
+      asn: string;
+      name: string;
+      status: string;
+      visibilityPercent: number;
+      risPeersSeeing: number;
+      totalRisPeers: number;
+      announcedPrefixesV4: number;
+      announcedIpsV4: number;
+      observedNeighbours: number;
+      probeLatencyMs: number;
+      probeStatus: number;
+      lastQueryTime: string;
+    };
+    ooredoo: {
+      asn: string;
+      name: string;
+      status: string;
+      visibilityPercent: number;
+      risPeersSeeing: number;
+      totalRisPeers: number;
+      announcedPrefixesV4: number;
+      announcedIpsV4: number;
+      observedNeighbours: number;
+      probeLatencyMs: number;
+      probeStatus: number;
+      lastQueryTime: string;
+    };
+    cam: {
+      name: string;
+      status: string;
+      httpCode: number;
+      latencyMs: number;
+    };
+  };
+  ioda: {
+    country: string;
+    activeEventsCount: number;
+    lastChecked: string;
+  };
+  liveLatencyProbes: Array<{
+    target: string;
+    pingMs: number;
+    httpStatus: number;
+    status: string;
+  }>;
+}
+
 export function useLiveRadar() {
   const maritimeQuery = useQuery<MaritimeResponse>({
     queryKey: ['radar', 'maritime'],
@@ -99,6 +169,16 @@ export function useLiveRadar() {
     refetchInterval: 60000,
   });
 
+  const telecomQuery = useQuery<TelecomTelemetryData>({
+    queryKey: ['radar', 'telecom'],
+    queryFn: async () => {
+      const res = await fetch('/api/telecom');
+      if (!res.ok) throw new Error('Failed to fetch live telecom telemetry');
+      return res.json();
+    },
+    refetchInterval: 30000,
+  });
+
   const isInitialLoading =
     maritimeQuery.isLoading || aviationQuery.isLoading || weatherQuery.isLoading;
 
@@ -108,6 +188,7 @@ export function useLiveRadar() {
     weather: weatherQuery.data,
     news: newsQuery.data,
     macro: macroQuery.data,
+    telecom: telecomQuery.data,
     isLoading: isInitialLoading,
     isRefetching: maritimeQuery.isFetching || aviationQuery.isFetching,
     isFetchingNews: newsQuery.isFetching,
@@ -118,6 +199,7 @@ export function useLiveRadar() {
       weatherQuery.refetch();
       newsQuery.refetch();
       macroQuery.refetch();
+      telecomQuery.refetch();
     },
   };
 }
