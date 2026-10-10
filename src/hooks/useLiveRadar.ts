@@ -122,21 +122,21 @@ export function useLiveRadar() {
   const maritimeQuery = useQuery<MaritimeResponse>({
     queryKey: ['radar', 'maritime'],
     queryFn: async () => {
-      const res = await fetch('/api/maritime');
+      const res = await fetch('/api/maritime', { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to fetch maritime telemetry');
       return res.json();
     },
-    refetchInterval: 12000,
+    refetchInterval: 6000,
   });
 
   const aviationQuery = useQuery<AviationResponse>({
     queryKey: ['radar', 'aviation'],
     queryFn: async () => {
-      const res = await fetch('/api/aviation');
+      const res = await fetch('/api/aviation', { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to fetch aviation radar');
       return res.json();
     },
-    refetchInterval: 12000,
+    refetchInterval: 5000,
   });
 
   const weatherQuery = useQuery<WeatherTelemetry>({

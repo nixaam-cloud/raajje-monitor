@@ -347,7 +347,7 @@ export default function AviationPanel({ flights = [], onFocusFlight }: AviationP
                       ) : (
                         <Minus className="w-2.5 h-2.5 text-slate-500" />
                       )}
-                      <span>{Math.round(f.altitudeFt / 1000)}k</span>
+                      <span>{f.altitudeFt <= 100 && f.velocityKts < 20 ? 'DOCK' : `${Math.round(f.altitudeFt / 1000)}k`}</span>
                     </div>
 
                     <ChevronDown

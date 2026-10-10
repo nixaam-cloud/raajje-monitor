@@ -225,7 +225,9 @@ export default function MaritimePanel({ vessels = [] }: MaritimePanelProps) {
                   <span className="truncate">{v.name}</span>
                 </span>
                 <span className="text-[10px] text-cyan-400 font-bold">
-                  {v.sog} kts // {v.cog}°
+                  {v.sog < 0.8 || v.navStatus.toLowerCase().includes('anchor') || v.navStatus.toLowerCase().includes('moored')
+                    ? '⚓ AT ANCHOR'
+                    : `${v.sog} kts // ${v.cog}°`}
                 </span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-slate-400">

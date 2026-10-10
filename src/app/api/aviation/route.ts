@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { INDIAN_OCEAN_MILITARY_FLIGHTS } from '@/data/indianOceanAviation';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export interface AviationFlight {
   id: string;
   icao24: string;
@@ -1059,18 +1062,35 @@ function updateTrackHistory(id: string, coords: [number, number]): [number, numb
   return existing.coords;
 }
 
-// Live kinematic ADS-B position extrapolation for fallback fleet
+// Live kinematic ADS-B position extrapolation for fallback / military fleet
 function updateFlightPositions(flights: AviationFlight[]): AviationFlight[] {
-  const now = new Date();
-  const timeOffsetSeconds = now.getMinutes() * 60 + now.getSeconds();
+  const now = Date.now() / 1000;
 
   return flights.map((f) => {
+    // If stationary/grounded craft, do not drift
+    if (f.velocityKts < 20 || (f.altitudeFt <= 100 && f.velocityKts <= 25)) {
+      return f;
+    }
+
     const speedDegPerSec = (f.velocityKts * 1.852) / (111 * 3600);
     const rad = (f.headingDeg * Math.PI) / 180;
+    const cosLat = Math.max(0.2, Math.cos((f.coordinates[1] * Math.PI) / 180));
 
-    const driftCycleSec = (timeOffsetSeconds + parseInt(f.icao24.slice(-2), 16) * 5) % 450;
-    const deltaLat = Math.cos(rad) * speedDegPerSec * driftCycleSec * 2.2;
-    const deltaLng = Math.sin(rad) * speedDegPerSec * driftCycleSec * 2.2;
+    // Stable seed from id string
+    let idHash = 0;
+    for (let i = 0; i < f.id.length; i++) {
+      idHash = (idHash * 31 + f.id.charCodeAt(i)) & 0xfffff;
+    }
+
+    // Kinematic progression: Continuous flight over time
+    // 40-minute patrol flight cycle without sudden jumps
+    const cyclePeriod = 2400;
+    const phase = ((now + idHash) % cyclePeriod) / cyclePeriod;
+    const progress = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
+    const offsetSec = (progress - 0.5) * 600; // -300s to +300s displacement
+
+    const deltaLat = Math.cos(rad) * speedDegPerSec * offsetSec;
+    const deltaLng = (Math.sin(rad) * speedDegPerSec * offsetSec) / cosLat;
 
     const currentLng = Number((f.coordinates[0] + deltaLng).toFixed(5));
     const currentLat = Number((f.coordinates[1] + deltaLat).toFixed(5));
@@ -1086,173 +1106,224 @@ function updateFlightPositions(flights: AviationFlight[]): AviationFlight[] {
   });
 }
 
+function parseFlightradarState(key: string, s: any[]): AviationFlight | null {
+  if (!s || !Array.isArray(s) || s.length < 6) return null;
+  const icao24 = String(s[0] || key).toLowerCase();
+  const lat = Number(s[1]);
+  const lng = Number(s[2]);
+  if (isNaN(lat) || isNaN(lng) || lat === null || lng === null) return null;
+
+  const headingDeg = Number(s[3]) || 0;
+  const altitudeFt = Number(s[4]) || 0;
+  const velocityKts = Number(s[5]) || 0;
+  const squawk = s[6] ? String(s[6]) : '1000';
+  const modelCode = (s[8] || '').trim().toUpperCase();
+  const tailNumber = (s[9] || '').trim().toUpperCase();
+  const rawOrigin = (s[11] || '').trim().toUpperCase();
+  const rawDest = (s[12] || '').trim().toUpperCase();
+  const flightNumber = (s[13] || '').trim();
+  const verticalRateFpm = Number(s[15]) || 0;
+  const rawCallsign = (s[16] || s[13] || tailNumber || `FLT-${key}`).trim().toUpperCase();
+  const airlineCode = (s[18] || '').trim().toUpperCase();
+
+  // Resolve aircraft model and category
+  const modelInfo = AIRCRAFT_TYPE_LOOKUP[modelCode];
+  const isSeaplane =
+    modelCode === 'DHC6' ||
+    tailNumber.startsWith('8Q-T') ||
+    tailNumber.startsWith('8Q-R') ||
+    rawCallsign.startsWith('8QT') ||
+    rawCallsign.startsWith('8QR') ||
+    (altitudeFt < 5000 && velocityKts < 180 && lng >= 72.5 && lng <= 74.0 && lat >= -1.0 && lat <= 7.5);
+
+  const isMilitary = isMilitaryCraft(rawCallsign, modelCode);
+
+  const aircraftCategory: AviationFlight['aircraftCategory'] = isMilitary
+    ? 'MILITARY'
+    : isSeaplane
+    ? 'SEAPLANE_TWIN_OTTER'
+    : modelInfo?.category
+    ? modelInfo.category
+    : altitudeFt > 20000
+    ? 'INTERNATIONAL_WIDEBODY'
+    : 'REGIONAL_TURBOPROP';
+
+  const aircraftType = modelInfo?.name
+    ? modelInfo.name
+    : isSeaplane
+    ? 'DHC-6 Twin Otter Floatplane'
+    : modelCode
+    ? `${modelCode} Commercial Jet`
+    : 'Aviation Aircraft';
+
+  const operator = isMilitary
+    ? 'Military / State Aircraft'
+    : resolveOperator(airlineCode, rawCallsign, tailNumber);
+
+  const isParked = velocityKts < 20 || (altitudeFt <= 100 && velocityKts <= 25);
+
+  // Origin / Destination resolution
+  let origin = rawOrigin ? (AIRPORT_NAMES[rawOrigin] || `${rawOrigin} Airport`) : '';
+  let destination = rawDest ? (AIRPORT_NAMES[rawDest] || `${rawDest} Airport`) : '';
+
+  if (isSeaplane) {
+    if (isParked) {
+      origin = origin || 'Velana Seaplane Base (VRMM / MLE)';
+      destination = 'Atoll Resort Water Dock // Moored';
+    } else if (rawOrigin === 'MLE') {
+      origin = 'Velana Seaplane Base (VRMM / MLE)';
+      destination = destination || 'Atoll Resort Water Runway';
+    } else if (rawDest === 'MLE') {
+      origin = origin || 'Atoll Resort Lagoon Water Base';
+      destination = 'Velana Seaplane Base (VRMM / MLE)';
+    } else {
+      origin = origin || 'Atoll Resort Water Runway';
+      destination = destination || 'Velana Seaplane Base (VRMM / MLE)';
+    }
+  } else {
+    if (isParked) {
+      origin = origin || 'Velana International (VRMM / MLE)';
+      destination = 'Velana Ground Apron // Stand';
+    } else {
+      if (!origin) origin = 'Indian Ocean Airway Entry';
+      if (!destination) destination = altitudeFt < 12000 ? 'Velana International (VRMM / MLE)' : 'Enroute Airway Destination';
+    }
+  }
+
+  const inEEZ = lng >= 71.0 && lng <= 76.0 && lat >= -2.6 && lat <= 7.8;
+
+  // Direction calculation
+  const isOrigMV = MALDIVES_AIRPORT_CODES.has(rawOrigin) || isSeaplane;
+  const isDestMV = MALDIVES_AIRPORT_CODES.has(rawDest) || destination.includes('MLE') || destination.includes('Velana');
+
+  let flightDirection: AviationFlight['flightDirection'] = 'OVERFLIGHT';
+  let isMaldivesRelated = false;
+
+  if (isSeaplane || (isOrigMV && isDestMV)) {
+    flightDirection = 'DOMESTIC';
+    isMaldivesRelated = true;
+  } else if (isDestMV) {
+    flightDirection = 'INBOUND';
+    isMaldivesRelated = true;
+  } else if (isOrigMV) {
+    flightDirection = 'OUTBOUND';
+    isMaldivesRelated = true;
+  } else if (inEEZ && altitudeFt < 14000 && verticalRateFpm < -180) {
+    flightDirection = 'INBOUND';
+    isMaldivesRelated = true;
+  } else if (inEEZ && altitudeFt < 18000 && verticalRateFpm > 300) {
+    flightDirection = 'OUTBOUND';
+    isMaldivesRelated = true;
+  } else if (inEEZ) {
+    flightDirection = 'OVERFLIGHT';
+    isMaldivesRelated = true;
+  }
+
+  const flightPhase = resolveFlightPhase(altitudeFt, velocityKts, verticalRateFpm);
+  const airwaySector = getAirwaySector(lng, lat, altitudeFt, flightPhase);
+  const history = updateTrackHistory(`live-${icao24}`, [lng, lat]);
+
+  return {
+    id: `flt-live-${icao24}`,
+    icao24,
+    callsign: rawCallsign,
+    flightNumber: flightNumber || undefined,
+    registration: tailNumber || undefined,
+    operator,
+    aircraftType,
+    aircraftCategory,
+    origin,
+    destination,
+    originCode: rawOrigin || undefined,
+    destinationCode: rawDest || undefined,
+    flightDirection,
+    isMaldivesRelated,
+    coordinates: [lng, lat],
+    altitudeFt,
+    velocityKts,
+    headingDeg,
+    verticalRateFpm,
+    squawk,
+    flightPhase,
+    history,
+    inEEZ,
+    airwaySector,
+    isMilitary,
+    militaryRole: isMilitary ? 'Military aircraft detected on live ADS-B' : undefined,
+    dataQuality: 'LIVE_ADSB' as const,
+  };
+}
+
 export async function GET() {
   let flights: AviationFlight[] = [];
   let source = 'LIVE_MALDIVES_ADS-B_RADAR';
 
-  // ─── TIER 1: LIVE RADAR FEED FOR MALDIVES AIRSPACE ───
+  // ─── TIER 1: DUAL-FEED LIVE RADAR FOR MALDIVES FIR + INDIAN OCEAN ───
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4500);
 
-    const liveRes = await fetch(
-      // Indian Ocean wide: N30°, S40°, W40°E, E115°E
-      'https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=30,-40,40,115',
-      {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          Accept: 'application/json',
-        },
-      }
-    );
+    const [maldivesRes, regionalRes] = await Promise.allSettled([
+      // Priority 1: High-fidelity Maldives FIR bounding box (N8.5°, S-2.5°, W70.5°, E76.0°)
+      fetch(
+        'https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=8.5,-2.5,70.5,76.0',
+        {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        }
+      ),
+      // Priority 2: Surrounding Indian Ocean Regional corridor (N22.0°, S-12.0°, W58.0°, E92.0°)
+      fetch(
+        'https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=22.0,-12.0,58.0,92.0',
+        {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        }
+      ),
+    ]);
     clearTimeout(timeout);
 
-    if (liveRes.ok) {
-      const data = await liveRes.json();
-      if (data && typeof data === 'object') {
-        const aircraftKeys = Object.keys(data).filter(
-          (k) => !['full_count', 'version', 'stats'].includes(k)
-        );
+    const rawMap = new Map<string, any[]>();
 
-        if (aircraftKeys.length > 0) {
-          flights = aircraftKeys.map((key) => {
-            const s = data[key];
-            const icao24 = String(s[0] || key).toLowerCase();
-            const lat = Number(s[1]);
-            const lng = Number(s[2]);
-            const headingDeg = Number(s[3]) || 0;
-            const altitudeFt = Number(s[4]) || 0;
-            const velocityKts = Number(s[5]) || 0;
-            const squawk = s[6] ? String(s[6]) : '1000';
-            const modelCode = (s[8] || '').trim().toUpperCase();
-            const tailNumber = (s[9] || '').trim().toUpperCase();
-            const rawOrigin = (s[11] || '').trim().toUpperCase();
-            const rawDest = (s[12] || '').trim().toUpperCase();
-            const flightNumber = (s[13] || '').trim();
-            const verticalRateFpm = Number(s[15]) || 0;
-            const rawCallsign = (s[16] || s[13] || tailNumber || `FLT-${key}`).trim().toUpperCase();
-            const airlineCode = (s[18] || '').trim().toUpperCase();
-
-            // Resolve aircraft model and category
-            const modelInfo = AIRCRAFT_TYPE_LOOKUP[modelCode];
-            const isSeaplane =
-              modelCode === 'DHC6' ||
-              tailNumber.startsWith('8Q-T') ||
-              tailNumber.startsWith('8Q-R') ||
-              rawCallsign.startsWith('8QT') ||
-              rawCallsign.startsWith('8QR') ||
-              (altitudeFt < 5000 && velocityKts < 180 && lng >= 72.5 && lng <= 74.0 && lat >= -1.0 && lat <= 7.5);
-
-            const isMilitary = isMilitaryCraft(rawCallsign, modelCode);
-
-            const aircraftCategory: AviationFlight['aircraftCategory'] = isMilitary
-              ? 'MILITARY'
-              : isSeaplane
-              ? 'SEAPLANE_TWIN_OTTER'
-              : modelInfo?.category
-              ? modelInfo.category
-              : altitudeFt > 20000
-              ? 'INTERNATIONAL_WIDEBODY'
-              : 'REGIONAL_TURBOPROP';
-
-            const aircraftType = modelInfo?.name
-              ? modelInfo.name
-              : isSeaplane
-              ? 'DHC-6 Twin Otter Floatplane'
-              : modelCode
-              ? `${modelCode} Commercial Jet`
-              : 'Aviation Aircraft';
-
-            const operator = isMilitary
-              ? 'Military / State Aircraft'
-              : resolveOperator(airlineCode, rawCallsign, tailNumber);
-
-            // Origin / Destination resolution
-            let origin = rawOrigin ? (AIRPORT_NAMES[rawOrigin] || `${rawOrigin} Airport`) : '';
-            let destination = rawDest ? (AIRPORT_NAMES[rawDest] || `${rawDest} Airport`) : '';
-
-            if (isSeaplane) {
-              if (rawOrigin === 'MLE') {
-                origin = 'Velana Seaplane Base (VRMM / MLE)';
-                destination = destination || 'Atoll Resort Water Runway';
-              } else if (rawDest === 'MLE') {
-                origin = origin || 'Atoll Resort Lagoon Water Base';
-                destination = 'Velana Seaplane Base (VRMM / MLE)';
-              } else {
-                origin = origin || 'Atoll Resort Water Runway';
-                destination = destination || 'Velana Seaplane Base (VRMM / MLE)';
-              }
-            } else {
-              if (!origin) origin = 'Indian Ocean Airway Entry';
-              if (!destination) destination = altitudeFt < 12000 ? 'Velana International (VRMM / MLE)' : 'Enroute Airway Destination';
-            }
-
-            const inEEZ = lng >= 71.0 && lng <= 76.0 && lat >= -2.6 && lat <= 7.8;
-
-            // Direction calculation
-            const isOrigMV = MALDIVES_AIRPORT_CODES.has(rawOrigin) || isSeaplane;
-            const isDestMV = MALDIVES_AIRPORT_CODES.has(rawDest) || destination.includes('MLE') || destination.includes('Velana');
-
-            let flightDirection: AviationFlight['flightDirection'] = 'OVERFLIGHT';
-            let isMaldivesRelated = false;
-
-            if (isSeaplane || (isOrigMV && isDestMV)) {
-              flightDirection = 'DOMESTIC';
-              isMaldivesRelated = true;
-            } else if (isDestMV) {
-              flightDirection = 'INBOUND';
-              isMaldivesRelated = true;
-            } else if (isOrigMV) {
-              flightDirection = 'OUTBOUND';
-              isMaldivesRelated = true;
-            } else if (inEEZ && altitudeFt < 14000 && verticalRateFpm < -180) {
-              flightDirection = 'INBOUND';
-              isMaldivesRelated = true;
-            } else if (inEEZ && altitudeFt < 18000 && verticalRateFpm > 300) {
-              flightDirection = 'OUTBOUND';
-              isMaldivesRelated = true;
-            } else if (inEEZ) {
-              flightDirection = 'OVERFLIGHT';
-              isMaldivesRelated = true;
-            }
-
-            const flightPhase = resolveFlightPhase(altitudeFt, velocityKts, verticalRateFpm);
-            const airwaySector = getAirwaySector(lng, lat, altitudeFt, flightPhase);
-            const history = updateTrackHistory(`live-${icao24}`, [lng, lat]);
-
-            return {
-              id: `flt-live-${icao24}`,
-              icao24,
-              callsign: rawCallsign,
-              flightNumber: flightNumber || undefined,
-              registration: tailNumber || undefined,
-              operator,
-              aircraftType,
-              aircraftCategory,
-              origin,
-              destination,
-              originCode: rawOrigin || undefined,
-              destinationCode: rawDest || undefined,
-              flightDirection,
-              isMaldivesRelated,
-              coordinates: [lng, lat],
-              altitudeFt,
-              velocityKts,
-              headingDeg,
-              verticalRateFpm,
-              squawk,
-              flightPhase,
-              history,
-              inEEZ,
-              airwaySector,
-              isMilitary,
-              militaryRole: isMilitary ? 'Military aircraft detected on live ADS-B' : undefined,
-              dataQuality: 'LIVE_ADSB' as const,
-            };
-          });
+    // Load regional flights first
+    if (regionalRes.status === 'fulfilled' && regionalRes.value.ok) {
+      const regData = await regionalRes.value.json();
+      if (regData && typeof regData === 'object') {
+        for (const [k, v] of Object.entries(regData)) {
+          if (!['full_count', 'version', 'stats'].includes(k) && Array.isArray(v)) {
+            rawMap.set(k, v);
+          }
         }
       }
+    }
+
+    // Overlay high-priority Maldives FIR flights (ensuring local TMA seaplanes & arrivals are never dropped)
+    if (maldivesRes.status === 'fulfilled' && maldivesRes.value.ok) {
+      const mvData = await maldivesRes.value.json();
+      if (mvData && typeof mvData === 'object') {
+        for (const [k, v] of Object.entries(mvData)) {
+          if (!['full_count', 'version', 'stats'].includes(k) && Array.isArray(v)) {
+            rawMap.set(k, v);
+          }
+        }
+      }
+    }
+
+    if (rawMap.size > 0) {
+      const parsed: AviationFlight[] = [];
+      for (const [key, raw] of rawMap.entries()) {
+        const item = parseFlightradarState(key, raw);
+        if (item) parsed.push(item);
+      }
+      flights = parsed;
     }
   } catch {
     // Primary feed error, fallback to OpenSky
@@ -1265,10 +1336,11 @@ export async function GET() {
       const timeout = setTimeout(() => controller.abort(), 4000);
 
       const openSkyRes = await fetch(
-        'https://opensky-network.org/api/states/all?lamin=-40&lomin=40&lamax=30&lomax=115',
+        'https://opensky-network.org/api/states/all?lamin=-15&lomin=65&lamax=15&lomax=85',
         {
           signal: controller.signal,
           headers: { Accept: 'application/json' },
+          cache: 'no-store',
         }
       );
       clearTimeout(timeout);
@@ -1339,7 +1411,7 @@ export async function GET() {
     source = 'MALDIVES_EEZ_ADS-B_RADAR (OFFLINE_FALLBACK)';
     flights = updateFlightPositions(FALLBACK_FLIGHTS).map((f) => ({ ...f, dataQuality: 'SIMULATED_ADSB' as const }));
   } else {
-    // Keep the payload map-friendly: military first, then Maldives-related, then nearest to the Maldives
+    // Keep the payload map-friendly: military first, then Maldives-related, then nearest to Maldives
     const dist = (f: AviationFlight) => Math.hypot(f.coordinates[0] - 73.5, f.coordinates[1] - 4.2);
     flights = flights
       .map((f) => ({ ...f, dataQuality: f.dataQuality ?? ('LIVE_ADSB' as const) }))
@@ -1385,7 +1457,9 @@ export async function GET() {
     },
     {
       headers: {
-        'Cache-Control': 'public, s-maxage=6, stale-while-revalidate=12',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
       },
     }
   );

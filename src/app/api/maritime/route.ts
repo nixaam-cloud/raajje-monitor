@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { INDIAN_OCEAN_VESSELS } from '@/data/indianOceanMaritime';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export interface MaritimeVessel {
   id: string;
   mmsi: string;
@@ -836,21 +839,44 @@ const BASE_VESSELS: MaritimeVessel[] = [
 
 // Real-time kinematic AIS movement calculation
 function calculateLivePositions(vessels: MaritimeVessel[]): MaritimeVessel[] {
-  const now = new Date();
-  const timeOffsetSeconds = now.getMinutes() * 60 + now.getSeconds();
+  const now = Date.now() / 1000;
 
   return vessels.map((v) => {
-    if (v.sog < 1) {
-      return v;
+    // Distinctly identify anchored and moored vessels so they are clear in UI and telemetry
+    const isAnchorStatus =
+      v.sog < 0.8 ||
+      v.navStatus.toLowerCase().includes('anchor') ||
+      v.navStatus.toLowerCase().includes('moored');
+
+    if (isAnchorStatus) {
+      return {
+        ...v,
+        sog: 0,
+        navStatus: v.navStatus.toLowerCase().includes('moored')
+          ? 'Moored / Lagoon Berth'
+          : v.navStatus.toLowerCase().includes('night')
+          ? 'Moored / Night Anchorage'
+          : 'At Anchor',
+      };
     }
 
     const speedDegPerSec = (v.sog * 1.852) / (111 * 3600);
     const rad = (v.cog * Math.PI) / 180;
+    const cosLat = Math.max(0.2, Math.cos((v.coordinates[1] * Math.PI) / 180));
 
-    const idSeed = Array.from(v.id).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-    const driftCycleSec = (timeOffsetSeconds + (idSeed % 997) * 12) % 600;
-    const deltaLat = Math.cos(rad) * speedDegPerSec * driftCycleSec * 2.5;
-    const deltaLng = Math.sin(rad) * speedDegPerSec * driftCycleSec * 2.5;
+    let idHash = 0;
+    for (let i = 0; i < v.id.length; i++) {
+      idHash = (idHash * 31 + v.id.charCodeAt(i)) & 0xfffff;
+    }
+
+    // Continuous smooth navigation transit cycle (60-minute loop, back & forth along channel / patrol route)
+    const cyclePeriod = 3600;
+    const phase = ((now + idHash) % cyclePeriod) / cyclePeriod;
+    const progress = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
+    const offsetSec = (progress - 0.5) * 1200; // -600s to +600s displacement
+
+    const deltaLat = Math.cos(rad) * speedDegPerSec * offsetSec;
+    const deltaLng = (Math.sin(rad) * speedDegPerSec * offsetSec) / cosLat;
 
     const currentLng = Number((v.coordinates[0] + deltaLng).toFixed(5));
     const currentLat = Number((v.coordinates[1] + deltaLat).toFixed(5));
@@ -902,7 +928,9 @@ export async function GET() {
       },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=20',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
         },
       }
     );

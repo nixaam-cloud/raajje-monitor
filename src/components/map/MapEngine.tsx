@@ -296,6 +296,9 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
   const outageMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
   const lastMarkerClickTimeRef = useRef<number>(0);
   const latestFlightsRef = useRef<Map<string, AviationFlight>>(new Map());
+  const latestVesselsRef = useRef<Map<string, MaritimeVessel>>(new Map());
+  const liveFlightCoordsRef = useRef<Map<string, [number, number]>>(new Map());
+  const liveVesselCoordsRef = useRef<Map<string, [number, number]>>(new Map());
 
   const {
     showVessels,
@@ -1542,6 +1545,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
   }, [showOutages, mapLoaded, telecom, playTargetLock, setSelectedEntity]);
 
   // Update Vessel Markers smoothly
+  // Update Vessel Markers smoothly
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
@@ -1559,7 +1563,15 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       if (!currentVesselIds.has(id)) {
         marker.remove();
         vesselMarkersRef.current.delete(id);
+        latestVesselsRef.current.delete(id);
+        liveVesselCoordsRef.current.delete(id);
       }
+    });
+
+    // Cache latest vessels and sync authoritative server coordinates
+    vessels.forEach((v) => {
+      latestVesselsRef.current.set(v.id, v);
+      liveVesselCoordsRef.current.set(v.id, [...v.coordinates]);
     });
 
     // Add or update markers
@@ -1575,11 +1587,36 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       if (v.type === 'fishing_dhoni') accentColor = '#fbbf24'; // yellow
       if (v.isMilitary) accentColor = '#f43f5e'; // rose = military / naval
 
+      const isAnchored = v.sog < 0.8 || v.navStatus.toLowerCase().includes('anchor') || v.navStatus.toLowerCase().includes('moored');
+
+      const renderVesselSvg = () => {
+        if (isAnchored) {
+          return `
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="${accentColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drop-shadow-[0_0_8px_${accentColor}]">
+              <circle cx="12" cy="5" r="3" fill="${accentColor}" fill-opacity="0.3"></circle>
+              <line x1="12" y1="8" x2="12" y2="21"></line>
+              <path d="M5 12H2a10 10 0 0 0 20 0h-3"></path>
+              <line x1="9" y1="10" x2="15" y2="10"></line>
+            </svg>
+          `;
+        }
+        return `
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="${accentColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drop-shadow-[0_0_8px_${accentColor}]">
+            <polygon points="12 2 19 21 12 17 5 21 12 2" fill="${accentColor}" fill-opacity="0.3"></polygon>
+          </svg>
+        `;
+      };
+
       if (existing) {
         existing.marker.setLngLat(v.coordinates);
         const icon = existing.el.querySelector('.vessel-icon') as HTMLElement | null;
         if (icon) {
-          icon.style.transform = `rotate(${v.cog}deg)`;
+          icon.style.transform = isAnchored ? 'none' : `rotate(${v.cog}deg)`;
+          icon.innerHTML = renderVesselSvg();
+        }
+        const sogEl = existing.el.querySelector('.vessel-hover-sog') as HTMLElement | null;
+        if (sogEl) {
+          sogEl.textContent = isAnchored ? `⚓ ${v.navStatus}` : `${v.typeName} // SOG: ${v.sog} kts`;
         }
       } else {
         const el = document.createElement('div');
@@ -1588,19 +1625,17 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         el.style.height = '24px';
 
         el.innerHTML = `
-          <div class="vessel-icon w-full h-full flex items-center justify-center transition-transform duration-500" style="transform: rotate(${v.cog}deg);">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="${accentColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drop-shadow-[0_0_8px_${accentColor}]">
-              <polygon points="12 2 19 21 12 17 5 21 12 2" fill="${accentColor}" fill-opacity="0.3"></polygon>
-            </svg>
+          <div class="vessel-icon w-full h-full flex items-center justify-center transition-transform duration-500" style="${isAnchored ? '' : `transform: rotate(${v.cog}deg);`}">
+            ${renderVesselSvg()}
           </div>
-          <div class="hidden group-hover:flex absolute left-6 -top-2 z-50 flex-col bg-slate-950/95 border border-slate-700 px-2 py-1 rounded shadow-xl text-[10px] font-mono whitespace-nowrap pointer-events-none">
+          <div class="hidden group-hover:flex absolute left-6 -top-2 z-50 flex-col bg-slate-950/95 border border-slate-700 px-2.5 py-1.5 rounded-lg shadow-xl text-[10px] font-mono whitespace-nowrap pointer-events-none backdrop-blur-md">
             <div class="flex items-center justify-between gap-2">
               <span class="text-white font-bold">${v.name}</span>
-              <span class="text-[9px] px-1 py-0.2 rounded font-bold ${v.isMilitary ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : v.inEEZ ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'}">
-                ${v.isMilitary ? 'MILITARY' : v.inEEZ ? 'MALDIVES EEZ' : 'SURROUNDING SLOC'}
+              <span class="text-[9px] px-1 py-0.2 rounded font-bold ${isAnchored ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : v.isMilitary ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : v.inEEZ ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'}">
+                ${isAnchored ? '⚓ AT ANCHOR' : v.isMilitary ? 'MILITARY' : v.inEEZ ? 'MALDIVES EEZ' : 'SURROUNDING SLOC'}
               </span>
             </div>
-            <span class="text-slate-400">${v.typeName} // SOG: ${v.sog} kts</span>
+            <span class="text-slate-400 vessel-hover-sog">${isAnchored ? `⚓ ${v.navStatus}` : `${v.typeName} // SOG: ${v.sog} kts`}</span>
             <span class="text-[9px] text-slate-500">${v.zone}</span>
           </div>
         `;
@@ -1611,23 +1646,24 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           e.stopPropagation();
           lastMarkerClickTimeRef.current = Date.now();
           playTargetLock();
+          const liveCoords = liveVesselCoordsRef.current.get(v.id) || v.coordinates;
           setSelectedEntity({
             type: 'vessel',
             id: v.id,
             title: v.name,
             subtitle: `${v.typeName} // MMSI: ${v.mmsi}`,
             badge: {
-              text: `${v.zone.toUpperCase()}`,
-              variant: v.hazardousCargo ? 'amber' : 'emerald',
+              text: isAnchored ? '⚓ AT ANCHOR' : `${v.zone.toUpperCase()}`,
+              variant: isAnchored ? 'amber' : v.hazardousCargo ? 'amber' : 'emerald',
             },
-            coordinates: v.coordinates,
+            coordinates: liveCoords,
             telemetry: {
               MMSI: v.mmsi,
               IMO: v.imo || 'N/A',
               Callsign: v.callsign,
               Flag: `${v.flag} (${v.flagCode})`,
               Category: v.typeName,
-              'Speed (SOG)': `${v.sog} knots`,
+              'Speed (SOG)': isAnchored ? '0.0 knots (AT ANCHOR)' : `${v.sog} knots`,
               'Heading (COG)': `${v.cog}°`,
               Draft: `${v.draftMeters} m`,
               Dimensions: `${v.lengthMeters}m x ${v.beamMeters}m`,
@@ -1668,15 +1704,22 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       if (!currentFlightIds.has(id)) {
         marker.remove();
         flightMarkersRef.current.delete(id);
+        latestFlightsRef.current.delete(id);
+        liveFlightCoordsRef.current.delete(id);
       }
     });
 
-    flights.forEach((f) => latestFlightsRef.current.set(f.id, f));
+    // Cache latest flights and sync authoritative server coordinates
+    flights.forEach((f) => {
+      latestFlightsRef.current.set(f.id, f);
+      liveFlightCoordsRef.current.set(f.id, [...f.coordinates]);
+    });
 
     flights.forEach((f) => {
       const existing = flightMarkersRef.current.get(f.id);
 
       const isSeaplane = f.aircraftCategory === 'SEAPLANE_TWIN_OTTER';
+      const isParked = f.velocityKts < 20 || (f.altitudeFt <= 100 && f.velocityKts <= 25);
       const flightColor = f.isMilitary ? '#f43f5e' : isSeaplane ? '#38bdf8' : '#06b6d4';
       const airline = resolveAirline(f.callsign, f.operator);
       const flightNumber = formatFlightNumber(f.callsign, airline);
@@ -1697,6 +1740,8 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
 
       const routeText = f.isMilitary && (!shortRoute.from && !shortRoute.to)
         ? (f.airwaySector || 'PATROL AREA')
+        : isParked
+        ? (isSeaplane ? 'LAGOON WATER DOCK // MOORED' : 'VELANA GROUND // APRON STAND')
         : `${shortRoute.from || f.originCode || 'ORIG'} ➔ ${shortRoute.to || f.destinationCode || 'DEST'}`;
 
       if (existing) {
@@ -1706,13 +1751,13 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           icon.style.transform = `rotate(${f.headingDeg}deg)`;
         }
         const altEl = existing.el.querySelector('.flight-hover-alt') as HTMLElement | null;
-        if (altEl) altEl.textContent = `${f.altitudeFt.toLocaleString()} ft`;
+        if (altEl) altEl.textContent = isParked ? '0 ft (WATER/GROUND)' : `${f.altitudeFt.toLocaleString()} ft`;
         const spdEl = existing.el.querySelector('.flight-hover-spd') as HTMLElement | null;
-        if (spdEl) spdEl.textContent = `${f.velocityKts} kts`;
+        if (spdEl) spdEl.textContent = isParked ? '0 kts (MOORED)' : `${f.velocityKts} kts`;
         const hdgEl = existing.el.querySelector('.flight-hover-hdg') as HTMLElement | null;
         if (hdgEl) hdgEl.textContent = `${f.headingDeg}°`;
         const phaseEl = existing.el.querySelector('.flight-hover-phase') as HTMLElement | null;
-        if (phaseEl) phaseEl.textContent = f.flightPhase;
+        if (phaseEl) phaseEl.textContent = isParked ? (isSeaplane ? 'DOCK / MOORED' : 'RAMP / TAXI') : f.flightPhase;
       } else {
         const el = document.createElement('div');
         el.className = 'flight-marker cursor-pointer group relative flex items-center select-none hover:z-50';
@@ -1726,9 +1771,10 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
             </svg>
           </div>
 
-          <!-- Resting Compact Label (Only displays airline code like EK, Q2) -->
+          <!-- Resting Compact Label (Displays airline code like EK, Q2, and anchor if parked) -->
           <div class="flight-pill flex items-center gap-1 absolute left-6 -top-0.5 z-10 px-1 py-0.5 rounded bg-slate-950/85 border border-slate-700/80 shadow text-[9px] font-mono font-bold leading-none whitespace-nowrap pointer-events-auto backdrop-blur-sm transition-all group-hover:opacity-0 group-hover:pointer-events-none" style="border-left: 2px solid ${airline.brandColor}; color: ${flightColor};">
             <span>${labelCode}</span>
+            ${isParked ? `<span class="text-[8px] text-amber-400 font-bold">⚓</span>` : ''}
           </div>
 
           <!-- Hover Details Popover -->
@@ -1740,8 +1786,8 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
                 </span>
                 <span class="text-white font-bold text-[11px] tracking-tight">${flightNumber}</span>
               </div>
-              <span class="text-[8px] px-1 py-0.5 rounded font-bold uppercase ${f.isMilitary ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : f.flightDirection === 'INBOUND' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : f.flightDirection === 'OUTBOUND' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'}">
-                ${f.isMilitary ? 'MILITARY' : f.flightDirection}
+              <span class="text-[8px] px-1 py-0.5 rounded font-bold uppercase ${isParked ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : f.isMilitary ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : f.flightDirection === 'INBOUND' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : f.flightDirection === 'OUTBOUND' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'}">
+                ${isParked ? (isSeaplane ? '⚓ DOCKED' : 'PARKED') : f.isMilitary ? 'MILITARY' : f.flightDirection}
               </span>
             </div>
 
@@ -1758,11 +1804,11 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
             <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[9px] bg-slate-900/90 px-2 py-1.5 rounded border border-slate-800/90">
               <div class="flex items-center justify-between">
                 <span class="text-slate-500">ALT</span>
-                <span class="text-cyan-300 font-bold flight-hover-alt">${f.altitudeFt.toLocaleString()} ft</span>
+                <span class="text-cyan-300 font-bold flight-hover-alt">${isParked ? '0 ft (WATER/GROUND)' : `${f.altitudeFt.toLocaleString()} ft`}</span>
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-slate-500">SPD</span>
-                <span class="text-emerald-300 font-bold flight-hover-spd">${f.velocityKts} kts</span>
+                <span class="text-emerald-300 font-bold flight-hover-spd">${isParked ? '0 kts (MOORED)' : `${f.velocityKts} kts`}</span>
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-slate-500">HDG</span>
@@ -1770,14 +1816,14 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-slate-500">PHASE</span>
-                <span class="text-purple-300 font-bold flight-hover-phase">${f.flightPhase}</span>
+                <span class="text-purple-300 font-bold flight-hover-phase">${isParked ? (isSeaplane ? 'DOCK / MOORED' : 'RAMP / TAXI') : f.flightPhase}</span>
               </div>
             </div>
 
             <div class="flex items-center justify-between text-[8px] text-cyan-400/90 pt-0.5 border-t border-slate-800/60">
               <span class="text-slate-400 flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-                Tracked
+                <span class="w-1.5 h-1.5 rounded-full ${isParked ? 'bg-amber-400' : 'bg-cyan-400 animate-pulse'}"></span>
+                ${isParked ? 'Moored @ Water Dock' : 'Tracked Live'}
               </span>
               <span class="text-cyan-400 underline font-semibold flex items-center gap-0.5">Click for full dossier ➔</span>
             </div>
@@ -1791,16 +1837,17 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           lastMarkerClickTimeRef.current = Date.now();
           playTargetLock();
           const targetFlight = latestFlightsRef.current.get(f.id) || f;
+          const liveCoords = liveFlightCoordsRef.current.get(f.id) || targetFlight.coordinates;
           setSelectedEntity({
             type: 'flight',
             id: targetFlight.id,
             title: `${targetFlight.callsign} // ${targetFlight.operator}`,
             subtitle: `${targetFlight.aircraftType} (${targetFlight.aircraftCategory})`,
             badge: {
-              text: `${targetFlight.flightDirection} // ${targetFlight.flightPhase}`,
-              variant: targetFlight.flightDirection === 'INBOUND' ? 'emerald' : targetFlight.flightDirection === 'OUTBOUND' ? 'amber' : 'cyan',
+              text: isParked ? '⚓ PARKED @ DOCK' : `${targetFlight.flightDirection} // ${targetFlight.flightPhase}`,
+              variant: isParked ? 'amber' : targetFlight.flightDirection === 'INBOUND' ? 'emerald' : targetFlight.flightDirection === 'OUTBOUND' ? 'amber' : 'cyan',
             },
-            coordinates: targetFlight.coordinates,
+            coordinates: liveCoords,
             telemetry: {
               Callsign: targetFlight.callsign,
               ...(targetFlight.registration ? { 'Registration / Tail': targetFlight.registration } : {}),
@@ -1810,14 +1857,14 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
               Aircraft: targetFlight.aircraftType,
               Category: targetFlight.aircraftCategory,
               'Flight Direction': `${targetFlight.flightDirection} ${targetFlight.flightDirection === 'INBOUND' ? '(ARRIVING TO MALDIVES)' : targetFlight.flightDirection === 'OUTBOUND' ? '(DEPARTING FROM MALDIVES)' : targetFlight.flightDirection === 'DOMESTIC' ? '(DOMESTIC MALDIVES)' : '(TRANSIT OVERFLIGHT)'}`,
-              Route: `${targetFlight.origin} ➔ ${targetFlight.destination}`,
-              Altitude: `${targetFlight.altitudeFt.toLocaleString()} ft`,
-              Speed: `${targetFlight.velocityKts} knots`,
+              Route: isParked ? (isSeaplane ? 'Atoll Resort Lagoon Base // Moored @ Dock' : 'Velana Airport // Ground Stand') : `${targetFlight.origin} ➔ ${targetFlight.destination}`,
+              Altitude: isParked ? '0 ft (WATER/GROUND)' : `${targetFlight.altitudeFt.toLocaleString()} ft`,
+              Speed: isParked ? '0 knots (MOORED @ DOCK)' : `${targetFlight.velocityKts} knots`,
               Heading: `${targetFlight.headingDeg}°`,
               VerticalRate: `${targetFlight.verticalRateFpm} ft/min`,
               Squawk: targetFlight.squawk,
-              Sector: targetFlight.airwaySector || 'Maldives Airspace',
-              Phase: targetFlight.flightPhase,
+              Sector: isParked ? (isSeaplane ? 'Resort Lagoon Seaplane Base' : 'Velana Apron') : targetFlight.airwaySector || 'Maldives Airspace',
+              Phase: isParked ? (isSeaplane ? 'DOCK / MOORED' : 'RAMP / TAXI') : targetFlight.flightPhase,
               ...(targetFlight.militaryRole ? { 'Military Role': targetFlight.militaryRole } : {}),
               'Data Source':
                 targetFlight.dataQuality === 'MODELED_OSINT'
@@ -1838,6 +1885,60 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       }
     });
   }, [flights, showFlights, mapLoaded, playTargetLock, setSelectedEntity]);
+
+  // ─── REAL-TIME KINEMATIC INTERPOLATION TICKER ───
+  // Smoothly advances active flights and vessels every 1 second along heading/cog vectors between server polling cycles
+  useEffect(() => {
+    if (!mapLoaded) return;
+
+    const interval = setInterval(() => {
+      // 1. Advance Flights
+      if (showFlights && flightMarkersRef.current.size > 0) {
+        flightMarkersRef.current.forEach(({ marker }, id) => {
+          const flight = latestFlightsRef.current.get(id);
+          // Only advance aircraft that are active (velocityKts >= 20)
+          if (!flight || flight.velocityKts < 20) return;
+
+          const currentCoords = liveFlightCoordsRef.current.get(id) || flight.coordinates;
+          const speedDegPerSec = (flight.velocityKts * 1.852) / (111 * 3600);
+          const rad = (flight.headingDeg * Math.PI) / 180;
+          const cosLat = Math.max(0.2, Math.cos((currentCoords[1] * Math.PI) / 180));
+
+          // 1 second of forward displacement
+          const newLng = currentCoords[0] + (Math.sin(rad) * speedDegPerSec) / cosLat;
+          const newLat = currentCoords[1] + Math.cos(rad) * speedDegPerSec;
+
+          const nextCoords: [number, number] = [Number(newLng.toFixed(5)), Number(newLat.toFixed(5))];
+          liveFlightCoordsRef.current.set(id, nextCoords);
+          marker.setLngLat(nextCoords);
+        });
+      }
+
+      // 2. Advance Vessels
+      if (showVessels && vesselMarkersRef.current.size > 0) {
+        vesselMarkersRef.current.forEach(({ marker }, id) => {
+          const vessel = latestVesselsRef.current.get(id);
+          // Only advance vessels that are underway (sog >= 0.8)
+          if (!vessel || vessel.sog < 0.8) return;
+
+          const currentCoords = liveVesselCoordsRef.current.get(id) || vessel.coordinates;
+          const speedDegPerSec = (vessel.sog * 1.852) / (111 * 3600);
+          const rad = (vessel.cog * Math.PI) / 180;
+          const cosLat = Math.max(0.2, Math.cos((currentCoords[1] * Math.PI) / 180));
+
+          // 1 second of forward displacement
+          const newLng = currentCoords[0] + (Math.sin(rad) * speedDegPerSec) / cosLat;
+          const newLat = currentCoords[1] + Math.cos(rad) * speedDegPerSec;
+
+          const nextCoords: [number, number] = [Number(newLng.toFixed(5)), Number(newLat.toFixed(5))];
+          liveVesselCoordsRef.current.set(id, nextCoords);
+          marker.setLngLat(nextCoords);
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [mapLoaded, showFlights, showVessels]);
 
   // Handle fly-to targets from store (when user clicks an item in right or left panel)
   useEffect(() => {
