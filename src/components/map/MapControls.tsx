@@ -39,8 +39,12 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
     showCoverage,
     showOutages,
     toggleLayer,
+    leftPanelOpen,
+    rightPanelOpen,
   } = useMonitorStore();
   const { playClick } = useSoundEffects();
+
+  const isAnyDrawerOpenOnMobile = leftPanelOpen || rightPanelOpen;
 
   const handleToggle = (
     layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'radar' | 'cctv' | 'coverage' | 'outages'
@@ -133,7 +137,9 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
       {/* 1. Mobile Top Camera Viewport & Zoom Bar */}
       <div
         aria-label="Mobile Camera Viewport Shortcuts"
-        className="sm:hidden absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-auto max-w-[98vw] select-none"
+        className={`sm:hidden fixed top-[49px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[98vw] select-none transition-all duration-200 ${
+          isAnyDrawerOpenOnMobile ? 'hidden' : 'block'
+        }`}
       >
         <div className="w-full max-w-[98vw] flex items-center px-1.5 sm:px-2.5 py-1 rounded-xl tactical-panel border border-slate-800/80 shadow-2xl backdrop-blur-xl">
           {viewportControlsContent}
@@ -143,7 +149,9 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
       {/* 2. Bottom Controls Dock (Tactical Layers on Mobile, Layers + Viewports on Desktop) */}
       <aside
         aria-label="Tactical Map Controls"
-        className="tactical-map-controls absolute left-1/2 -translate-x-1/2 z-20 flex items-center justify-center gap-1.5 sm:gap-2 pointer-events-auto max-w-[98vw] select-none"
+        className={`tactical-map-controls fixed sm:absolute bottom-[calc(max(8px,env(safe-area-inset-bottom,8px))+54px)] sm:bottom-6 left-1/2 -translate-x-1/2 z-30 sm:z-20 flex items-center justify-center gap-1.5 sm:gap-2 pointer-events-auto max-w-[98vw] select-none transition-all duration-200 ${
+          isAnyDrawerOpenOnMobile ? 'hidden sm:flex' : 'flex'
+        }`}
       >
         {/* Tactical Layer Quick Dock (Scrollable horizontally on mobile to prevent spilling) */}
         <div className="w-full max-w-[98vw] sm:max-w-none flex items-center px-1.5 sm:px-3 py-1 rounded-xl tactical-panel border border-slate-800/90 shadow-2xl backdrop-blur-xl">

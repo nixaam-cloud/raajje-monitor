@@ -117,11 +117,15 @@ body {
 
 /* Tactical Map Floating Controls on Mobile and Desktop */
 .tactical-map-controls {
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 64px);
+  position: fixed;
+  bottom: calc(max(8px, env(safe-area-inset-bottom, 8px)) + 54px);
+  z-index: 30;
 }
 
 @media (min-width: 640px) {
   .tactical-map-controls {
+    position: absolute;
     bottom: 1.5rem; /* 24px = sm:bottom-6 */
+    z-index: 20;
   }
 }

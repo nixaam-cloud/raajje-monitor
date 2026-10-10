@@ -97,7 +97,7 @@ export default function CockpitPage() {
       />
 
       {/* 2. Full-bleed Center Geospatial Radar Viewport */}
-      <div className="relative flex-1 w-full h-[calc(100vh-45px)] h-[calc(100dvh-45px)] overflow-hidden">
+      <div className="relative flex-1 min-h-0 w-full overflow-hidden">
         <MapEngine
           vessels={maritime?.vessels}
           flights={aviation?.flights}
