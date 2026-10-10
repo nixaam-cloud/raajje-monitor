@@ -15,7 +15,14 @@ import {
   MALDIVES_EEZ_GEOJSON,
   MALDIVES_BOUNDS,
 } from '@/data/maldivesGeo';
-import { SUBMARINE_CABLES_GEOJSON, CABLE_LANDING_STATIONS } from '@/data/cablesGeoJson';
+import {
+  SUBMARINE_CABLES_GEOJSON,
+  CABLE_LANDING_STATIONS,
+  MOBILE_COVERAGE_5G_GEOJSON,
+  MOBILE_COVERAGE_4G_GEOJSON,
+  CELL_TOWERS,
+  NETWORK_OUTAGES,
+} from '@/data/cablesGeoJson';
 import { WeatherTelemetry } from '@/app/api/weather/route';
 import {
   WEATHER_ZONES_GEOJSON,
@@ -285,6 +292,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
   const weatherMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
   const newsMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
   const cctvMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
+  const outageMarkersRef = useRef<Map<string, { marker: maplibregl.Marker; el: HTMLElement }>>(new Map());
   const lastMarkerClickTimeRef = useRef<number>(0);
   const latestFlightsRef = useRef<Map<string, AviationFlight>>(new Map());
 
@@ -298,6 +306,8 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
     showChokepoints,
     showRadarSweep,
     showCCTV,
+    showCoverage,
+    showOutages,
     selectedCCTVId,
     setSelectedCCTVId,
     flyToTarget,
@@ -427,6 +437,309 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
           'line-width': 1.8,
           'line-opacity': 0.85,
         },
+      });
+
+      // Click & Hover on Submarine Cables
+      map.on('click', 'cables-line', (e) => {
+        if (!e.features || e.features.length === 0) return;
+        if (Date.now() - lastMarkerClickTimeRef.current < 500) return;
+        const feat = e.features[0];
+        const props = feat.properties as any;
+        playTargetLock();
+        setSelectedEntity({
+          type: 'cable',
+          id: props.id,
+          title: props.name,
+          subtitle: props.system,
+          badge: {
+            text: `${props.capacityTbps} TBPS // ${props.status}`,
+            variant: 'emerald',
+          },
+          coordinates: [e.lngLat.lng, e.lngLat.lat],
+          telemetry: {
+            System: props.system,
+            'Total Length': `${props.lengthKm?.toLocaleString()} km`,
+            Capacity: `${props.capacityTbps} Tbps`,
+            'Ready For Service': props.rfsYear,
+            Owners: props.owners,
+            '1st Landing Gateways Beyond EEZ': props.firstLandingStationsAway || 'N/A',
+            Status: props.status,
+          },
+        });
+      });
+
+      map.on('mouseenter', 'cables-line', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'cables-line', () => {
+        map.getCanvas().style.cursor = '';
+      });
+
+      // 2b. Add Cable Landing Stations (National Gateways & 1st Landing Stations Beyond EEZ)
+      const landingStationFeatures: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+        type: 'FeatureCollection',
+        features: CABLE_LANDING_STATIONS.map((s) => ({
+          type: 'Feature',
+          properties: {
+            id: s.id,
+            name: s.name,
+            country: s.country,
+            region: s.atollOrRegion,
+            operator: s.operator,
+            capacity: `${s.capacityTbps} Tbps`,
+            isInternational: s.isInternational,
+            status: s.status,
+            cables: s.cablesConnected.join(', '),
+            latency: s.latencyToMaleMs !== undefined ? `${s.latencyToMaleMs} ms` : 'N/A',
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: s.coordinates,
+          },
+        })),
+      };
+
+      map.addSource('cable-landing-stations', {
+        type: 'geojson',
+        data: landingStationFeatures,
+      });
+
+      map.addLayer({
+        id: 'cable-stations-glow',
+        type: 'circle',
+        source: 'cable-landing-stations',
+        paint: {
+          'circle-radius': 9,
+          'circle-color': ['case', ['get', 'isInternational'], '#a855f7', '#10b981'],
+          'circle-opacity': 0.35,
+          'circle-blur': 1,
+        },
+      });
+
+      map.addLayer({
+        id: 'cable-stations-dot',
+        type: 'circle',
+        source: 'cable-landing-stations',
+        paint: {
+          'circle-radius': 4.5,
+          'circle-color': ['case', ['get', 'isInternational'], '#c084fc', '#34d399'],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#020617',
+        },
+      });
+
+      map.addLayer({
+        id: 'cable-stations-label',
+        type: 'symbol',
+        source: 'cable-landing-stations',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Semibold'],
+          'text-size': 9,
+          'text-offset': [0, 1.2],
+          'text-anchor': 'top',
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': ['case', ['get', 'isInternational'], '#e9d5ff', '#a7f3d0'],
+          'text-halo-color': '#030712',
+          'text-halo-width': 2,
+        },
+      });
+
+      map.on('click', 'cable-stations-dot', (e) => {
+        if (!e.features || e.features.length === 0) return;
+        if (Date.now() - lastMarkerClickTimeRef.current < 500) return;
+        const feat = e.features[0];
+        const props = feat.properties as any;
+        const geom = feat.geometry as GeoJSON.Point;
+        playTargetLock();
+        setSelectedEntity({
+          type: 'cable',
+          id: props.id,
+          title: props.name,
+          subtitle: `${props.country} (${props.region})`,
+          badge: {
+            text: props.isInternational ? 'INTERNATIONAL 1ST LANDING' : 'MALDIVES GATEWAY',
+            variant: props.isInternational ? 'purple' : 'emerald',
+          },
+          coordinates: geom.coordinates as [number, number],
+          telemetry: {
+            Station: props.name,
+            Location: `${props.region}, ${props.country}`,
+            Classification: props.isInternational ? '1st Landing Station (Beyond EEZ)' : 'National Primary Gateway',
+            Operator: props.operator,
+            Throughput: props.capacity,
+            'Cables Connected': props.cables,
+            'Latency to Malé': props.latency,
+            Status: props.status,
+          },
+        });
+      });
+
+      map.on('mouseenter', 'cable-stations-dot', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'cable-stations-dot', () => {
+        map.getCanvas().style.cursor = '';
+      });
+
+      // 2c. Mobile 5G Ultra-Broadband Coverage Envelopes
+      map.addSource('mobile-coverage-5g', {
+        type: 'geojson',
+        data: MOBILE_COVERAGE_5G_GEOJSON,
+      });
+
+      map.addLayer({
+        id: 'coverage-5g-fill',
+        type: 'fill',
+        source: 'mobile-coverage-5g',
+        layout: {
+          visibility: showCoverage ? 'visible' : 'none',
+        },
+        paint: {
+          'fill-color': '#06b6d4',
+          'fill-opacity': 0.12,
+        },
+      });
+
+      map.addLayer({
+        id: 'coverage-5g-line',
+        type: 'line',
+        source: 'mobile-coverage-5g',
+        layout: {
+          visibility: showCoverage ? 'visible' : 'none',
+        },
+        paint: {
+          'line-color': '#22d3ee',
+          'line-width': 1.5,
+          'line-dasharray': [3, 3],
+          'line-opacity': 0.65,
+        },
+      });
+
+      // 2d. Mobile 4G LTE-Advanced Archipelago Coverage
+      map.addSource('mobile-coverage-4g', {
+        type: 'geojson',
+        data: MOBILE_COVERAGE_4G_GEOJSON,
+      });
+
+      map.addLayer({
+        id: 'coverage-4g-fill',
+        type: 'fill',
+        source: 'mobile-coverage-4g',
+        layout: {
+          visibility: showCoverage ? 'visible' : 'none',
+        },
+        paint: {
+          'fill-color': '#3b82f6',
+          'fill-opacity': 0.04,
+        },
+      });
+
+      map.addLayer({
+        id: 'coverage-4g-line',
+        type: 'line',
+        source: 'mobile-coverage-4g',
+        layout: {
+          visibility: showCoverage ? 'visible' : 'none',
+        },
+        paint: {
+          'line-color': '#60a5fa',
+          'line-width': 1,
+          'line-opacity': 0.25,
+        },
+      });
+
+      // 2e. Strategic Cellular BTS Transmission Sites
+      const cellTowerFeatures: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+        type: 'FeatureCollection',
+        features: CELL_TOWERS.map((t) => ({
+          type: 'Feature',
+          properties: {
+            id: t.id,
+            name: t.name,
+            operator: t.operator,
+            atoll: t.atoll,
+            tech: t.technology,
+            height: `${t.mastHeightMeters}m`,
+            power: t.powerSource,
+            status: t.status,
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: t.coordinates,
+          },
+        })),
+      };
+
+      map.addSource('cell-towers', {
+        type: 'geojson',
+        data: cellTowerFeatures,
+      });
+
+      map.addLayer({
+        id: 'cell-towers-dot',
+        type: 'circle',
+        source: 'cell-towers',
+        layout: {
+          visibility: showCoverage ? 'visible' : 'none',
+        },
+        paint: {
+          'circle-radius': 3.5,
+          'circle-color': '#38bdf8',
+          'circle-stroke-width': 1.2,
+          'circle-stroke-color': '#020617',
+        },
+      });
+
+      map.addLayer({
+        id: 'cell-towers-label',
+        type: 'symbol',
+        source: 'cell-towers',
+        layout: {
+          visibility: showCoverage ? 'visible' : 'none',
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Semibold'],
+          'text-size': 8,
+          'text-offset': [0, 1.1],
+          'text-anchor': 'top',
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': '#93c5fd',
+          'text-halo-color': '#020617',
+          'text-halo-width': 1.5,
+        },
+      });
+
+      map.on('click', 'cell-towers-dot', (e) => {
+        if (!e.features || e.features.length === 0) return;
+        if (Date.now() - lastMarkerClickTimeRef.current < 500) return;
+        const feat = e.features[0];
+        const props = feat.properties as any;
+        const geom = feat.geometry as GeoJSON.Point;
+        playTargetLock();
+        setSelectedEntity({
+          type: 'telecom',
+          id: props.id,
+          title: props.name,
+          subtitle: `${props.operator} // ${props.atoll}`,
+          badge: {
+            text: `${props.tech} // ${props.status}`,
+            variant: props.status === 'ONLINE' ? 'cyan' : 'amber',
+          },
+          coordinates: geom.coordinates as [number, number],
+          telemetry: {
+            'Tower Site': props.name,
+            Operator: props.operator,
+            Atoll: props.atoll,
+            Technology: props.tech,
+            'Mast Height': props.height,
+            'Power Source': props.power,
+            'Operational Status': props.status,
+          },
+        });
       });
 
       // 3. Add Strategic Chokepoints
@@ -797,11 +1110,25 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       if (map.getLayer('eez-labels-text')) map.setLayoutProperty('eez-labels-text', 'visibility', visibility);
     }
 
-    // Cables
+    // Cables & Landing Stations
     if (map.getLayer('cables-line') && map.getLayer('cables-glow')) {
       const visibility = showCables ? 'visible' : 'none';
       map.setLayoutProperty('cables-line', 'visibility', visibility);
       map.setLayoutProperty('cables-glow', 'visibility', visibility);
+      if (map.getLayer('cable-stations-glow')) map.setLayoutProperty('cable-stations-glow', 'visibility', visibility);
+      if (map.getLayer('cable-stations-dot')) map.setLayoutProperty('cable-stations-dot', 'visibility', visibility);
+      if (map.getLayer('cable-stations-label')) map.setLayoutProperty('cable-stations-label', 'visibility', visibility);
+    }
+
+    // Mobile Coverage & Cell Towers
+    if (map.getLayer('coverage-5g-fill')) {
+      const coverageVis = showCoverage ? 'visible' : 'none';
+      map.setLayoutProperty('coverage-5g-fill', 'visibility', coverageVis);
+      if (map.getLayer('coverage-5g-line')) map.setLayoutProperty('coverage-5g-line', 'visibility', coverageVis);
+      if (map.getLayer('coverage-4g-fill')) map.setLayoutProperty('coverage-4g-fill', 'visibility', coverageVis);
+      if (map.getLayer('coverage-4g-line')) map.setLayoutProperty('coverage-4g-line', 'visibility', coverageVis);
+      if (map.getLayer('cell-towers-dot')) map.setLayoutProperty('cell-towers-dot', 'visibility', coverageVis);
+      if (map.getLayer('cell-towers-label')) map.setLayoutProperty('cell-towers-label', 'visibility', coverageVis);
     }
 
     // Chokepoints
@@ -825,7 +1152,7 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
         map.setLayoutProperty(layerId, 'visibility', weatherVisibility);
       }
     });
-  }, [showEEZBoundary, showCables, showChokepoints, showWeatherAlerts, mapLoaded]);
+  }, [showEEZBoundary, showCables, showChokepoints, showWeatherAlerts, showCoverage, mapLoaded]);
 
   // Weather Observation Station Markers
   useEffect(() => {
@@ -1111,6 +1438,106 @@ export default function MapEngine({ vessels = [], flights = [], weather, news = 
       cctvMarkersRef.current.set(cam.id, { marker, el });
     });
   }, [showCCTV, mapLoaded, playTargetLock, setSelectedEntity, setSelectedCCTVId]);
+
+  // Update Network Outage Markers smoothly
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (!showOutages) {
+      outageMarkersRef.current.forEach(({ marker }) => marker.remove());
+      outageMarkersRef.current.clear();
+      return;
+    }
+
+    const currentOutageIds = new Set(NETWORK_OUTAGES.map((o) => o.id));
+
+    outageMarkersRef.current.forEach(({ marker }, id) => {
+      if (!currentOutageIds.has(id)) {
+        marker.remove();
+        outageMarkersRef.current.delete(id);
+      }
+    });
+
+    NETWORK_OUTAGES.forEach((outage) => {
+      if (!outageMarkersRef.current.has(outage.id)) {
+        const el = document.createElement('div');
+        el.className = 'outage-marker cursor-pointer group relative flex items-center justify-center select-none';
+        el.style.width = '32px';
+        el.style.height = '32px';
+
+        const severityColor =
+          outage.severity === 'DEGRADED'
+            ? '#f59e0b'
+            : outage.severity === 'STANDBY_POWER'
+            ? '#06b6d4'
+            : '#a855f7';
+
+        el.innerHTML = `
+          <!-- Pulsing warning ring -->
+          <div class="absolute inset-0 rounded-full animate-ping opacity-60 pointer-events-none" style="background-color: ${severityColor};"></div>
+          <div class="absolute inset-1 rounded-full animate-pulse opacity-40 pointer-events-none" style="background-color: ${severityColor};"></div>
+          <!-- Center core beacon -->
+          <div class="relative z-10 w-5 h-5 rounded-full flex items-center justify-center shadow-lg border border-slate-900" style="background-color: ${severityColor};">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#020617" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+          </div>
+          <!-- Floating Outage Tag -->
+          <div class="absolute left-8 -top-1 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-950/90 border border-slate-700/80 shadow-xl text-[9px] font-mono whitespace-nowrap pointer-events-auto backdrop-blur-md group-hover:scale-105 group-hover:border-amber-400 transition-all">
+            <span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background-color: ${severityColor};"></span>
+            <span class="font-bold text-slate-100">${outage.island}</span>
+            <span class="text-[8px] font-bold px-1 py-0.2 rounded" style="color: ${severityColor}; background-color: ${severityColor}22;">${outage.severity}</span>
+          </div>
+        `;
+
+        el.addEventListener('pointerdown', (e) => e.stopPropagation());
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          lastMarkerClickTimeRef.current = Date.now();
+          playTargetLock();
+          setSelectedEntity({
+            type: 'outage',
+            id: outage.id,
+            title: `${outage.island} // ${outage.atoll}`,
+            subtitle: `${outage.operator} - ${outage.type.replace(/_/g, ' ')}`,
+            badge: {
+              text: outage.severity,
+              variant:
+                outage.severity === 'DEGRADED'
+                  ? 'amber'
+                  : outage.severity === 'STANDBY_POWER'
+                  ? 'cyan'
+                  : 'purple',
+            },
+            coordinates: outage.coordinates,
+            telemetry: {
+              Island: outage.island,
+              Atoll: outage.atoll,
+              Operator: outage.operator,
+              Severity: outage.severity,
+              Category: outage.type.replace(/_/g, ' '),
+              'Affected Subscribers': outage.affectedSubscribers.toLocaleString(),
+              'Estimated Recovery': outage.etaRecovery,
+              'Technical Cause': outage.cause,
+              'Impact Assessment': outage.impact,
+              'Backup & Failover': outage.backupStatus,
+              'Incident Duration': outage.startedAt,
+            },
+          });
+        });
+
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat(outage.coordinates)
+          .addTo(map);
+
+        outageMarkersRef.current.set(outage.id, { marker, el });
+      }
+    });
+  }, [showOutages, mapLoaded, playTargetLock, setSelectedEntity]);
 
   // Update Vessel Markers smoothly
   useEffect(() => {

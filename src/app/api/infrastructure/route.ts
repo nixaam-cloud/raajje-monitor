@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { MALDIVES_AIRPORTS, MALDIVES_PORTS } from '@/data/maldivesGeo';
-import { CABLE_LANDING_STATIONS, SUBMARINE_CABLES_GEOJSON } from '@/data/cablesGeoJson';
+import {
+  CABLE_LANDING_STATIONS,
+  SUBMARINE_CABLES_GEOJSON,
+  NETWORK_OUTAGES,
+  TELECOM_HEALTH_METRICS,
+  CELL_TOWERS,
+} from '@/data/cablesGeoJson';
 
 export const MEDICAL_FACILITIES = [
   {
@@ -59,6 +65,9 @@ export async function GET() {
       airports: MALDIVES_AIRPORTS,
       ports: MALDIVES_PORTS,
       medicalHospitals: MEDICAL_FACILITIES,
+      telecomOutages: NETWORK_OUTAGES,
+      telecomHealth: TELECOM_HEALTH_METRICS,
+      cellTowers: CELL_TOWERS,
     },
     {
       headers: {

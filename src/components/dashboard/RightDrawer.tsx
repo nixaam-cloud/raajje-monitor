@@ -13,9 +13,11 @@ import WeatherSwellCard from './WeatherSwellCard';
 import TourismMacroCard from './TourismMacroCard';
 import LiveTVPanel from './LiveTVPanel';
 import CCTVPanel from './CCTVPanel';
+import TelcoPanel from './TelcoPanel';
 import HorizontalScrollContainer from './HorizontalScrollContainer';
-import { Ship, Plane, CloudLightning, BarChart3, Tv, Video, X, ChevronDown, ChevronUp, Map as MapIcon } from 'lucide-react';
+import { Ship, Plane, CloudLightning, BarChart3, Tv, Video, Wifi, X, ChevronDown, ChevronUp, Map as MapIcon } from 'lucide-react';
 import { MALDIVES_CCTV_FEEDS } from '@/data/cctvFeeds';
+import { NETWORK_OUTAGES } from '@/data/cablesGeoJson';
 
 interface RightDrawerProps {
   vessels?: MaritimeVessel[];
@@ -72,6 +74,12 @@ export default function RightDrawer({
       label: 'CCTV CAMS',
       icon: <Video className="w-3.5 h-3.5 text-rose-400" />,
       badge: MALDIVES_CCTV_FEEDS.length,
+    },
+    {
+      id: 'telco',
+      label: 'TELCO & NET',
+      icon: <Wifi className="w-3.5 h-3.5 text-cyan-400" />,
+      badge: NETWORK_OUTAGES.length,
     },
   ];
 
@@ -205,6 +213,7 @@ export default function RightDrawer({
             {activeRightTab === 'macro' && <TourismMacroCard macro={macro} />}
             {activeRightTab === 'tv' && <LiveTVPanel />}
             {activeRightTab === 'cctv' && <CCTVPanel />}
+            {activeRightTab === 'telco' && <TelcoPanel />}
           </div>
         </>
       )}

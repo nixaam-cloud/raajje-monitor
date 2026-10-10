@@ -19,6 +19,8 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowLeftRight,
+  Wifi,
+  AlertTriangle,
 } from 'lucide-react';
 
 export default function EntityDossierModal() {
@@ -113,6 +115,10 @@ export default function EntityDossierModal() {
         return <CloudRain className="w-4 h-4 text-amber-400 shrink-0" />;
       case 'cctv':
         return <Video className="w-4 h-4 text-rose-400 shrink-0" />;
+      case 'telecom':
+        return <Wifi className="w-4 h-4 text-cyan-400 shrink-0" />;
+      case 'outage':
+        return <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />;
       default:
         return <Rss className="w-4 h-4 text-cyan-400 shrink-0" />;
     }

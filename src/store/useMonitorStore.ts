@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type EntityType = 'vessel' | 'flight' | 'cable' | 'atoll' | 'port' | 'chokepoint' | 'news' | 'weather' | 'cctv';
+export type EntityType = 'vessel' | 'flight' | 'cable' | 'atoll' | 'port' | 'chokepoint' | 'news' | 'weather' | 'cctv' | 'telecom' | 'outage';
 
 export interface SelectedEntity {
   type: EntityType;
@@ -32,7 +32,7 @@ export interface EventAlert {
   rawNews?: any;
 }
 
-export type ActiveDrawerTab = 'maritime' | 'aviation' | 'weather' | 'macro' | 'tv' | 'cctv';
+export type ActiveDrawerTab = 'maritime' | 'aviation' | 'weather' | 'macro' | 'tv' | 'cctv' | 'telco';
 
 interface MonitorState {
   // Layer Toggles
@@ -45,6 +45,8 @@ interface MonitorState {
   showChokepoints: boolean;
   showRadarSweep: boolean;
   showCCTV: boolean;
+  showCoverage: boolean;
+  showOutages: boolean;
   
   // Tactical UI Preferences
   soundEnabled: boolean;
@@ -70,7 +72,7 @@ interface MonitorState {
   selectedAtollId: string | null;
 
   // Actions
-  toggleLayer: (layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'chokepoints' | 'radar' | 'cctv') => void;
+  toggleLayer: (layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'chokepoints' | 'radar' | 'cctv' | 'coverage' | 'outages') => void;
   setSoundEnabled: (enabled: boolean) => void;
   toggleSound: () => void;
   toggleCrtScanlines: () => void;
@@ -102,6 +104,8 @@ export const useMonitorStore = create<MonitorState>((set) => ({
   showChokepoints: true,
   showRadarSweep: true,
   showCCTV: true,
+  showCoverage: true,
+  showOutages: true,
 
   // Tactical HUD Preferences
   soundEnabled: true,
@@ -148,6 +152,10 @@ export const useMonitorStore = create<MonitorState>((set) => ({
           return { showRadarSweep: !state.showRadarSweep };
         case 'cctv':
           return { showCCTV: !state.showCCTV };
+        case 'coverage':
+          return { showCoverage: !state.showCoverage };
+        case 'outages':
+          return { showOutages: !state.showOutages };
         default:
           return state;
       }

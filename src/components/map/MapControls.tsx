@@ -14,6 +14,8 @@ import {
   Video,
   Plus,
   Minus,
+  Wifi,
+  AlertTriangle,
 } from 'lucide-react';
 import HorizontalScrollContainer from '../dashboard/HorizontalScrollContainer';
 
@@ -33,12 +35,14 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
     showEEZBoundary,
     showRadarSweep,
     showCCTV,
+    showCoverage,
+    showOutages,
     toggleLayer,
   } = useMonitorStore();
   const { playClick } = useSoundEffects();
 
   const handleToggle = (
-    layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'radar' | 'cctv'
+    layer: 'vessels' | 'flights' | 'weather' | 'cables' | 'ports' | 'eez' | 'radar' | 'cctv' | 'coverage' | 'outages'
   ) => {
     playClick();
     toggleLayer(layer);
@@ -102,6 +106,32 @@ export default function MapControls({ onZoomIn, onZoomOut, onResetView }: MapCon
           >
             <Network className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-purple-400" />
             <span>CABLES</span>
+          </button>
+
+          <button
+            onClick={() => handleToggle('coverage')}
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-mono font-medium rounded-lg transition-all shrink-0 ${
+              showCoverage
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-950 font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
+            }`}
+            title="Toggle 5G/4G Mobile Coverage"
+          >
+            <Wifi className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-cyan-400" />
+            <span>5G/4G NET</span>
+          </button>
+
+          <button
+            onClick={() => handleToggle('outages')}
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-mono font-medium rounded-lg transition-all shrink-0 ${
+              showOutages
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-950 font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
+            }`}
+            title="Toggle Live Network Outages & Incidents"
+          >
+            <AlertTriangle className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-amber-400" />
+            <span>OUTAGES</span>
           </button>
 
           <button
